@@ -1,0 +1,54 @@
+# Virtual Environments
+venv/
+.venv/
+env/
+tfenv/
+
+# Python Bytecode and Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Generated output files
+vtu_results.xlsx
+raw_results.csv
+raw_summary.csv
+server_pid.txt
+cap.png
+captcha_screenshot.png
+2a84u4.png
+img_0002.png
+students.csv
+
+# Secrets
+.env
+
+# Large model files
+*.h5
+*.hdf5
+
+# Chrome / Selenium
+Recaptcha/chromedriver/
+Recaptcha/Chrome/
+Recaptcha/chrome-win32/
+Recaptcha/chrome-win64/
+Recaptcha/.chromedriver/
+Recaptcha/chrome_data/
+Recaptcha/captcha_screenshots/
+
+# Distribution / Packaging
+dist/
+build/
+*.egg-info/
+
+# IDE specific
+.vscode/
+.idea/
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Server logs
+server_*.log
+

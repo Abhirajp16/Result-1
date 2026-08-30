@@ -1,0 +1,17 @@
+tensorflow==2.21.0
+flask==2.3.3
+flask-socketio==5.3.6
+python-socketio==5.16.3
+python-engineio==4.13.3
+pymongo==4.17.0
+pandas==2.3.3
+numpy==1.26.2
+selenium==4.46.0
+webdriver-manager==4.1.2
+beautifulsoup4==4.15.0
+openpyxl==3.1.5
+pillow==12.1.1
+opencv-python==4.11.0.86
+requests==2.33.1
+urllib3==2.6.3
+python-dotenv==1.2.2

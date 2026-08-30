@@ -1,0 +1,274 @@
+import os
+import sys
+import numpy as np
+import cv2
+import tensorflow as tf
+from tensorflow.keras import backend as K
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoAlertPresentException
+import time
+import pandas as pd
+from bs4 import BeautifulSoup
+
+# --- Configuration ---
+VTU_RESULTS_URL = "https://results.vtu.ac.in/JJEcbcs25/index.php"
+MODEL_FILE = "vtu_captcha_predictor.h5" # <-- UPDATE THIS TO YOUR BEST MODEL
+INPUT_CSV = "students.csv"
+OUTPUT_EXCEL = "vtu_results.xlsx"
+MAX_CAPTCHA_ATTEMPTS = 10
+
+# --- Model Constants (MUST MATCH train.py) ---
+IMG_WIDTH = 160
+IMG_HEIGHT = 75
+CHARACTERS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+MAX_LENGTH = 6
+num_to_char = {i: char for i, char in enumerate(CHARACTERS)}
+# -------------------------------------------
+
+
+# --- Helper Function 1: Preprocessing (From your best model) ---
+def preprocess_image(img_path):
+    """Loads and preprocesses a HORIZONTAL image with cleaning."""
+    try:
+        img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+        if img is None: raise Exception("Image is None")
+        # Using the v4 model's preprocessing
+        img = cv2.GaussianBlur(img, (5, 5), 0)
+        _, img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        kernel = np.ones((2,2), np.uint8)
+        img = cv2.erode(img, kernel, iterations = 1)
+        img = cv2.resize(img, (IMG_WIDTH, IMG_HEIGHT))
+        img = img / 255.0
+        img = np.expand_dims(img, axis=-1)
+        img = np.expand_dims(img, axis=0) 
+        return img
+    except Exception as e:
+        print(f"  [Error] Preprocessing failed: {e}", file=sys.stderr)
+        return None
+
+# --- Helper Function 2: Decoding (From solve.py) ---
+def decode_prediction(pred):
+    """Decodes the raw model output (CTC) into a string."""
+    input_len = np.ones(pred.shape[0]) * pred.shape[1]
+    results = K.ctc_decode(pred, input_length=input_len, greedy=True)[0][0]
+    output_text = ""
+    for num in results[0]:
+        num = num.numpy()
+        if num == -1: break
+        if num < len(num_to_char):
+            output_text += num_to_char[num]
+    return output_text[:MAX_LENGTH]
+
+# --- [NEW] Helper Function 3: Scrape Results ---
+def scrape_results_page(page_source, usn):
+    """Parses the HTML of the results page and extracts subject data."""
+    print(f"  [Info] Scraping results for {usn}...")
+    soup = BeautifulSoup(page_source, 'html.parser')
+    results_data = []
+    
+    # --- This is a GUESS. The HTML structure might be different. ---
+    # Find the table containing subjects. This selector looks for a table
+    # that has a row with the text "Subject Code".
+    try:
+        # A common pattern is a <table> with class 'table'
+        table = soup.find('table', {'class': 'table'}) 
+        if not table:
+            # Fallback: Find the first <table>
+            table = soup.find('table')
+            
+        if not table:
+            print(f"  [Error] Could not find results table for {usn}.")
+            return []
+
+        rows = table.find_all('tr')
+        
+        # Look for the header row to know which columns are which
+        # We assume 1=Code, 2=Name, 5=Total, 6=Result
+        # These indices (col[0], col[1], col[4], col[5]) MIGHT NEED TUNING.
+        for row in rows:
+            cols = row.find_all(['td', 'th']) # Find cells
+            if len(cols) > 5 and "Subject Code" not in cols[0].text: # Skip header
+                subject_code = cols[0].text.strip()
+                subject_name = cols[1].text.strip()
+                total_marks = cols[4].text.strip()
+                pass_fail = cols[5].text.strip()
+                
+                # Check if it's a valid subject row
+                if subject_code and subject_name and total_marks:
+                    results_data.append({
+                        "USN": usn,
+                        "Subject Code": subject_code,
+                        "Subject Name": subject_name,
+                        "Total Marks": total_marks,
+                        "Pass/Fail": pass_fail
+                    })
+        
+        print(f"  [Info] Found {len(results_data)} subjects for {usn}.")
+        return results_data
+
+    except Exception as e:
+        print(f"  [Error] Scraping failed for {usn}: {e}")
+        return []
+
+# --- Main Automation ---
+def main():
+    # 1. Load USN list
+    try:
+        usn_df = pd.read_csv(INPUT_CSV)
+        if "USN" not in usn_df.columns:
+            print(f"Error: Input CSV '{INPUT_CSV}' must have a column named 'USN'.")
+            return
+        usn_list = usn_df["USN"].str.strip().str.upper().tolist()
+        print(f"Loaded {len(usn_list)} USNs from '{INPUT_CSV}'.")
+    except FileNotFoundError:
+        print(f"Error: Input file not found: '{INPUT_CSV}'")
+        return
+    except Exception as e:
+        print(f"Error reading CSV: {e}")
+        return
+
+    # 2. Load the trained model
+    print(f"Loading model from {MODEL_FILE}...")
+    try:
+        model = tf.keras.models.load_model(MODEL_FILE)
+        model.summary()
+    except Exception as e:
+        print(f"Error loading model: {e}"); return
+        
+    # 3. Set up Selenium
+    print("Starting browser...")
+    try:
+        service = Service() 
+        options = webdriver.ChromeOptions()
+        # options.add_argument("--headless") # Uncomment to run headless
+        driver = webdriver.Chrome(service=service, options=options)
+    except Exception as e:
+        print(f"Error starting Selenium WebDriver: {e}"); return
+
+    all_student_results = [] # This will store all data for the Excel file
+    failed_usns = []
+
+    # 4. --- Main Loop ---
+    try:
+        for usn in usn_list:
+            print(f"\n--- Processing USN: {usn} ---")
+            success = False
+            
+            # Go to the main page for each student
+            driver.get(VTU_RESULTS_URL)
+            wait = WebDriverWait(driver, 10)
+            
+            for attempt in range(MAX_CAPTCHA_ATTEMPTS):
+                print(f"  [Attempt {attempt + 1}/{MAX_CAPTCHA_ATTEMPTS}]")
+                try:
+                    # 5. Find elements
+                    usn_box = wait.until(EC.presence_of_element_located((By.NAME, "lns")))
+                    captcha_box = driver.find_element(By.NAME, "captchacode")
+                    captcha_image = driver.find_element(By.XPATH, "//img[contains(@src, 'vtu_captcha.php')]")
+                    submit_button = driver.find_element(By.ID, "submit")
+                    
+                    # 6. Enter USN
+                    usn_box.clear(); captcha_box.clear()
+                    usn_box.send_keys(usn)
+                    
+                    # 7. Solve CAPTCHA
+                    print("  [Info] Solving CAPTCHA...")
+                    captcha_screenshot_path = "captcha_screenshot.png"
+                    captcha_image.screenshot(captcha_screenshot_path)
+                    
+                    image_data = preprocess_image(captcha_screenshot_path)
+                    if image_data is None: 
+                        print("  [Warn] Preprocessing failed, refreshing..."); 
+                        driver.refresh(); continue
+                        
+                    prediction = model.predict(image_data, verbose=0)
+                    solved_text = decode_prediction(prediction)
+                    print(f"  [Info] Model Predicted: '{solved_text}'")
+                    
+                    # 8. Submit
+                    captcha_box.send_keys(solved_text)
+                    current_url = driver.current_url
+                    submit_button.click()
+                    
+                    # 9. Check for success (URL change)
+                    try:
+                        WebDriverWait(driver, 5).until(EC.url_changes(current_url))
+                        # URL changed! Check if it's a success page or failure alert
+                        
+                        try:
+                            # Check for "Invalid Captcha" alert on the *new* page
+                            alert_wait = WebDriverWait(driver, 2)
+                            alert = alert_wait.until(EC.alert_is_present())
+                            alert_text = alert.text
+                            print(f"  [Fail] Alert detected: '{alert_text}'. Going back...")
+                            alert.accept()
+                            driver.get(VTU_RESULTS_URL) # Go back to main page
+                            continue # Try again
+                        except (TimeoutException, NoAlertPresentException):
+                            # NO alert! This is TRUE success!
+                            print(f"  [Success] CAPTCHA cracked for {usn}!")
+                            success = True
+                            # 10. Scrape the data
+                            student_data = scrape_results_page(driver.page_source, usn)
+                            if student_data:
+                                all_student_results.extend(student_data)
+                            break # Success, exit retry loop
+
+                    except TimeoutException:
+                        # URL did not change, handle alert on *current* page
+                        print("  [Fail] URL did not change.")
+                        try:
+                            alert_wait = WebDriverWait(driver, 2)
+                            alert = alert_wait.until(EC.alert_is_present())
+                            print(f"  [Info] Alert detected: '{alert.text}'. Clicking 'OK'.")
+                            alert.accept()
+                        except (TimeoutException, NoAlertPresentException):
+                            print("  [Info] No alert box found. Refreshing CAPTCHA.")
+                        
+                        # Refresh CAPTCHA and retry
+                        try:
+                            refresh_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//img[contains(@src, 'refresh.png')]")))
+                            refresh_button.click()
+                            time.sleep(1)
+                        except Exception:
+                            print("  [Warn] Could not refresh CAPTCHA, forcing page reload.")
+                            driver.refresh()
+                            
+                except Exception as e:
+                    print(f"  [Error] An unexpected error occurred on attempt {attempt + 1}: {e}")
+                    driver.refresh()
+                    time.sleep(1)
+            
+            if not success:
+                print(f"--- [FAILED] Could not fetch results for USN: {usn} ---")
+                failed_usns.append(usn)
+                
+    except Exception as e:
+        print(f"\nA fatal error occurred during the main loop: {e}")
+    finally:
+        print("\nClosing browser.")
+        driver.quit()
+
+    # 5. --- Save results to Excel ---
+    if all_student_results:
+        print(f"\nSaving {len(all_student_results)} subject entries to '{OUTPUT_EXCEL}'...")
+        results_df = pd.DataFrame(all_student_results)
+        # Reorder columns
+        results_df = results_df[["USN", "Subject Code", "Subject Name", "Total Marks", "Pass/Fail"]]
+        results_df.to_excel(OUTPUT_EXCEL, index=False)
+        print("Save complete.")
+    else:
+        print("\nNo results were fetched to save.")
+
+    if failed_usns:
+        print("\nThe following USNs failed after all attempts:")
+        for usn in failed_usns:
+            print(f"  - {usn}")
+
+if __name__ == "__main__":
+    main()
+

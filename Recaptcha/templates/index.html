@@ -1,0 +1,2001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VTU Result Fetcher</title>
+<script src="/static/tailwind.js"></script>
+<script src="/static/socket.io.min.js"></script>
+<script src="/static/chart.umd.min.js"></script>
+<style>
+:root {
+  --pine: #123D2E;
+  --forest: #1C7A5E;
+  --mint: #2ECC91;
+  --accent: #1C7A5E;
+  --accent-dark: #123D2E;
+  --accent-soft: #E4F3EC;
+  --accent-2: #2ECC91;
+  --accent-3: #123D2E;
+  --ink: #14171A;
+  --ink-soft: #2E3A35;
+  --muted: #8A9089;
+  --line: #E5EAE6;
+  --bg: #F6F8F7;
+  --card: #FFFFFF;
+  --ok: #1C7A5E;
+  --err: #E5484D;
+  --warn: #B7792B;
+  --radius: 16px;
+  --grad: linear-gradient(135deg, #2ECC91 0%, #1C7A5E 65%, #123D2E 100%);
+  --shadow-sm: 0 1px 2px rgba(18,61,46,.06), 0 1px 3px rgba(18,61,46,.08);
+  --shadow: 0 8px 20px -8px rgba(18,61,46,.18);
+  --shadow-lg: 0 24px 60px -18px rgba(18,61,46,.28);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background:
+    radial-gradient(900px 400px at 85% -10%, rgba(99,102,241,.10), transparent 60%),
+    radial-gradient(900px 400px at 8% -5%, rgba(14,159,135,.10), transparent 55%),
+    var(--bg);
+  color: var(--ink);
+  font-family: "Segoe UI Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: rgba(14,159,135,.18); }
+h1 { font-size: 22px; font-weight: 800; letter-spacing: -.03em; margin: 0; }
+h2 { font-size: 16px; font-weight: 700; letter-spacing: -.01em; margin: 0 0 16px; display: flex; align-items: center; gap: 10px; }
+h3 { font-size: 13.5px; font-weight: 700; margin: 0 0 12px; color: var(--ink-soft, #3a4553); }
+label.lbl {
+  display: block; font-size: 11.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 7px;
+}
+.h2-ico { width: 30px; height: 30px; border-radius: 9px; background: var(--accent-soft); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.h2-ico svg { width: 16px; height: 16px; stroke: var(--accent-dark); }
+.page { width: 100%; max-width: none; margin: 0; padding: 26px 28px 70px; }
+
+/* ---------- header ---------- */
+.site-header {
+  background: linear-gradient(90deg, #E4F3EC 0%, #EDF7F2 45%, #F6F8F7 100%);
+  border-bottom: 1px solid #CBE6DB;
+  position: sticky; top: 0; z-index: 60;
+}
+.header-inner { width: 100%; max-width: none; margin: 0; padding: 14px 28px 0; }
+.brand-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.brand-l { display: flex; align-items: center; gap: 14px; }
+.brand-mark {
+  width: 42px; height: 42px; border-radius: 12px; background: var(--grad);
+  display: flex; align-items: center; justify-content: center; color: #fff;
+  box-shadow: 0 8px 20px -6px rgba(14,159,135,.5);
+}
+.brand-mark svg { width: 24px; height: 24px; }
+.brand-txt h1 { background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.brand-sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.brand-r { display: flex; align-items: center; gap: 10px; }
+.db-badge {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12.5px; font-weight: 700; padding: 7px 13px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink-soft);
+}
+.db-badge .dot { width: 8px; height: 8px; border-radius: 99px; background: var(--muted); }
+.db-badge.ok { color: var(--ok); border-color: rgba(18,183,106,.35); background: #e9f9f1; }
+.db-badge.ok .dot { background: var(--ok); box-shadow: 0 0 0 3px rgba(18,183,106,.18); animation: pulse 2s infinite; }
+.db-badge.off { color: var(--err); border-color: rgba(229,72,77,.35); background: #fdeef0; }
+.db-badge.off .dot { background: var(--err); }
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 3px rgba(18,183,106,.18);} 50% { box-shadow: 0 0 0 6px rgba(18,183,106,.08);} }
+.tabs { display: flex; gap: 6px; margin-top: 14px; }
+.tab-btn {
+  border: none; background: transparent; cursor: pointer;
+  font: inherit; font-weight: 650; color: var(--muted);
+  padding: 8px 16px; border-radius: 999px;
+  transition: background .18s, color .18s;
+}
+.tab-btn:hover { color: var(--ink); background: var(--accent-soft); }
+.tab-btn.active {
+  color: #fff; background: var(--pine);
+  box-shadow: 0 6px 14px -6px rgba(18,61,46,.55);
+}
+.tab-btn.active::after { content:""; }
+
+/* ---------- layout ---------- */
+.panel {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 22px 24px; margin-bottom: 20px; box-shadow: var(--shadow-sm);
+  transition: box-shadow .25s ease, transform .25s ease;
+}
+.panel:hover { box-shadow: var(--shadow); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 820px) { .grid-2 { grid-template-columns: 1fr; } }
+.tab-page { display: none; animation: fadeUp .35s ease; }
+.tab-page.active { display: block; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px);} to { opacity: 1; transform: none;} }
+
+/* ---------- stats strip ---------- */
+.stat-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+@media (max-width: 720px) { .stat-strip { grid-template-columns: 1fr; } }
+.stat-card {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px 18px; box-shadow: var(--shadow-sm); position: relative; overflow: hidden;
+}
+.stat-card::after {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--grad);
+}
+.stat-card .k { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.stat-card .v { font-size: 26px; font-weight: 800; letter-spacing: -.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.stat-card .v.grad { background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.stat-card.hero {
+  background: linear-gradient(135deg, #1C7A5E 0%, #123D2E 100%);
+  border-color: transparent; box-shadow: var(--shadow);
+}
+.stat-card.hero::after { background: var(--mint); }
+.stat-card.hero .k { color: #B7E4D2; }
+.stat-card.hero .v { color: #FFFFFF; background: none; -webkit-text-fill-color: initial; }
+
+/* ---------- inputs / buttons ---------- */
+input[type=text], input[type=number], textarea {
+  width: 100%; padding: 10px 13px;
+  border: 1px solid var(--line); border-radius: 11px;
+  font: inherit; color: var(--ink); background: var(--card);
+  transition: border-color .2s, box-shadow .2s;
+}
+select {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  width: 100%; padding: 10px 38px 10px 13px;
+  border: 1px solid #CBE6DB; border-radius: 11px;
+  font: inherit; font-weight: 600; color: var(--ink); background: var(--card);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%231C7A5E' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+  cursor: pointer; transition: border-color .2s, box-shadow .2s, background-color .2s;
+}
+select:hover { border-color: var(--forest); }
+select:focus {
+  outline: none; border-color: var(--forest);
+  box-shadow: 0 0 0 3.5px rgba(28,122,94,.15);
+}
+select:disabled { background-color: #F2F5F4; color: var(--muted); cursor: not-allowed; }
+select option { font-weight: 500; color: var(--ink); background: var(--card); }
+
+/* ---------- custom dropdowns ---------- */
+.cdrop { position: relative; width: 100%; }
+.cdrop-btn {
+  appearance: none; -webkit-appearance: none;
+  width: 100%; padding: 10px 38px 10px 13px; cursor: pointer;
+  border: 1px solid #CBE6DB; border-radius: 11px;
+  background: var(--card); color: var(--ink); font: inherit; font-weight: 600;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  transition: border-color .2s, box-shadow .2s;
+}
+.cdrop-btn .lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cdrop-btn .chev { flex: 0 0 auto; color: var(--forest); transition: transform .2s ease; }
+.cdrop:hover .cdrop-btn { border-color: var(--forest); }
+.cdrop.open .cdrop-btn { border-color: var(--forest); box-shadow: 0 0 0 3.5px rgba(28,122,94,.15); }
+.cdrop.open .chev { transform: rotate(180deg); }
+.cdrop-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 90;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: var(--shadow-lg); max-height: 260px; overflow-y: auto;
+  padding: 6px; display: none;
+}
+.cdrop.open .cdrop-menu { display: block; animation: fadeUp .15s ease; }
+.cdrop-opt {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px; border-radius: 8px; cursor: pointer;
+  font-size: 13.5px; font-weight: 500; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: background .12s, color .12s;
+}
+.cdrop-opt:hover { background: var(--accent-soft); color: var(--pine); }
+.cdrop-opt.sel { background: var(--forest); color: #fff; font-weight: 700; }
+.cdrop-opt.sel::after { content: "✓"; margin-left: auto; font-weight: 800; }
+.cdrop-opt.sel:hover { background: var(--pine); }
+.cdrop-menu::-webkit-scrollbar { width: 8px; }
+.cdrop-menu::-webkit-scrollbar-thumb { background: #CBD8D1; border-radius: 99px; }
+.cdrop-menu::-webkit-scrollbar-track { background: transparent; }
+input:focus, textarea:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3.5px rgba(28,122,94,.15);
+}
+textarea { resize: vertical; font-family: ui-monospace, "Cascadia Code", Consolas, Menlo, monospace; font-size: 13px; }
+.row { display: flex; gap: 10px; align-items: flex-end; }
+.row > * { flex: 1; }
+.btn {
+  border: none; cursor: pointer; font: inherit; font-weight: 700; letter-spacing: .01em;
+  padding: 10px 18px; border-radius: 11px; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  color: #fff; background: var(--forest);
+  transition: background .2s ease, box-shadow .2s ease, transform .1s ease;
+  box-shadow: 0 6px 16px -6px rgba(28,122,94,.5);
+}
+.btn:hover:not(:disabled) { background: var(--pine); box-shadow: 0 10px 22px -8px rgba(18,61,46,.55); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+.btn.ghost { background: var(--card); color: var(--forest); border: 1px solid #CBE6DB; box-shadow: none; }
+.btn.ghost:hover:not(:disabled) { border-color: var(--forest); color: var(--pine); background: var(--accent-soft); }
+.btn.warn { background: linear-gradient(135deg, #f87171, #e5484d); box-shadow: 0 6px 16px -6px rgba(229,72,77,.45); }
+.btn.warn:hover:not(:disabled) { box-shadow: 0 10px 22px -8px rgba(229,72,77,.5); }
+.btn.sm { padding: 6px 12px; font-size: 12.5px; border-radius: 9px; }
+.btn .spinner { width: 15px; height: 15px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 99px; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg);} }
+
+/* ---------- USN chips ---------- */
+.chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--accent-soft); color: var(--accent-dark);
+  font-family: ui-monospace, "Cascadia Code", Consolas, Menlo, monospace; font-size: 12.5px; font-weight: 600;
+  padding: 5px 9px 5px 12px; border-radius: 999px; margin: 3px;
+  border: 1px solid rgba(14,159,135,.18);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.chip::before { content: ""; width: 7px; height: 7px; border-radius: 99px; background: var(--accent); }
+.chip:hover { transform: translateY(-1px); box-shadow: 0 4px 10px -4px rgba(14,159,135,.4); }
+.chip .x { cursor: pointer; font-weight: 800; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; border-radius: 99px; opacity: .55; }
+.chip .x:hover { opacity: 1; background: rgba(14,159,135,.18); }
+.chip.bad { background: #fdeef0; color: var(--err); border-color: rgba(229,72,77,.2); }
+.chip.bad::before { background: var(--err); }
+.preview-count { font-size: 12.5px; color: var(--ink-soft); margin: 10px 2px 4px; font-weight: 600; }
+.invalid-list { color: var(--err); font-size: 12.5px; margin: 4px 2px 0; font-weight: 600; }
+
+/* ---------- status bar / progress ---------- */
+.status-bar { display: none; align-items: center; gap: 18px; flex-wrap: wrap; margin-top: 18px; padding: 16px 18px; background: #f7fafb; border: 1px solid var(--line); border-radius: 13px; }
+.status-bar.show { display: flex; }
+.stat-mini { display: flex; flex-direction: column; min-width: 90px; }
+.stat-mini .k { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.stat-mini .v { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.stat-mini .v.green { color: var(--ok); }
+.prog-wrap { flex: 1; min-width: 180px; }
+.prog-bar { height: 10px; background: #e6ecf1; border-radius: 99px; overflow: hidden; }
+.prog-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #2ECC91, #1C7A5E); border-radius: 99px; transition: width .35s ease; }
+.prog-label { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 6px; }
+
+/* ---------- log terminal ---------- */
+.log-shell { background: #0e1620; border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); }
+.log-head {
+  display: flex; align-items: center; gap: 8px; padding: 11px 16px;
+  background: linear-gradient(180deg, #172230, #101a26); border-bottom: 1px solid #1e2c3d;
+}
+.log-head .t { color: #a9bfd1; font-size: 12.5px; font-weight: 700; letter-spacing: .06em; flex: 1; }
+.log-dots { display: flex; gap: 7px; }
+.log-dots i { width: 11px; height: 11px; border-radius: 99px; }
+.log-dots i:nth-child(1) { background: #ff5f57; } .log-dots i:nth-child(2) { background: #febc2e; } .log-dots i:nth-child(3) { background: #28c840; }
+.log-box pre {
+  margin: 0; color: #9fb3c7;
+  font-family: ui-monospace, "Cascadia Code", Consolas, Menlo, monospace;
+  font-size: 12.5px; line-height: 1.6; padding: 14px 18px;
+  height: 420px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+}
+.log-box pre::-webkit-scrollbar, .tbl-wrap::-webkit-scrollbar { width: 10px; height: 10px; }
+.log-box pre::-webkit-scrollbar-thumb { background: #2c3e52; border-radius: 99px; }
+.log-box pre::-webkit-scrollbar-track { background: transparent; }
+.log-box pre .l.head { color: #6ee7d0; font-weight: 700; }
+.log-box pre .l.ok { color: #4ade80; }
+.log-box pre .l.err { color: #f87171; }
+.log-box pre .l.warn { color: #fbbf24; }
+.log-box pre .l.info { color: #67e8f9; }
+.log-box pre .l.subj { color: #a78bfa; font-weight: 700; }
+.log-box pre .l.cap { color: #fecaca; }
+
+/* ---------- tables ---------- */
+.tbl-wrap { overflow: auto; max-height: 540px; border: 1px solid var(--line); border-radius: 13px; box-shadow: var(--shadow-sm); }
+table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.data thead th {
+  position: sticky; top: 0; z-index: 5;
+  background: #f2f6f8; color: var(--ink-soft);
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  text-align: left; padding: 11px 13px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+table.data tbody td { padding: 9px 13px; border-bottom: 1px solid #eff2f6; white-space: nowrap; }
+table.data tbody tr:nth-child(even) { background: #fafcfd; }
+table.data tbody tr:hover { background: var(--accent-soft); }
+table.data td.num, table.data th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 99px; }
+.pill.pass { background: #e9fbf1; color: var(--ok); } .pill.pass::before { background: var(--ok); }
+.pill.fail { background: #fdeef0; color: var(--err); } .pill.fail::before { background: var(--err); }
+
+/* ---------- analytics ---------- */
+.rank-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+@media (max-width: 720px) { .rank-cards { grid-template-columns: 1fr; } }
+.rank-card {
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; background: var(--card);
+  box-shadow: var(--shadow-sm); position: relative; overflow: hidden; transition: transform .2s ease, box-shadow .2s ease;
+}
+.rank-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.rank-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--grad); }
+.rank-card .rk { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.rank-card .rv { font-size: 26px; font-weight: 800; margin: 7px 0 2px; letter-spacing: -.02em; background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.rank-card .ru { font-family: ui-monospace, "Cascadia Code", Consolas, Menlo, monospace; font-size: 13px; color: var(--ink-soft); }
+.rank-card.hero {
+  background: linear-gradient(135deg, #1C7A5E 0%, #123D2E 100%);
+  border-color: transparent; box-shadow: var(--shadow);
+}
+.rank-card.hero::before { background: var(--mint); height: 4px; }
+.rank-card.hero .rk { color: #B7E4D2; }
+.rank-card.hero .rv { background: none; -webkit-text-fill-color: initial; color: #fff; }
+.rank-card.hero .ru { color: #D8EFE4; }
+.chart-box { position: relative; height: 320px; }
+
+/* ---------- modal / toast ---------- */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(15,23,36,.5); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+}
+.modal-overlay.open { display: flex; animation: fadeUp .2s ease; }
+.modal {
+  background: var(--card); border-radius: 18px; padding: 26px; width: 440px; max-width: 94vw;
+  box-shadow: var(--shadow-lg); border: 1px solid var(--line);
+}
+.modal h2 { background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+#toast {
+  position: fixed; bottom: 26px; left: 50%; transform: translate(-50%, 16px);
+  background: #101b29; color: #e7eef5; padding: 12px 20px; border-radius: 12px;
+  font-size: 13.5px; font-weight: 600; opacity: 0; pointer-events: none; z-index: 200;
+  max-width: 92vw; text-align: center; box-shadow: var(--shadow-lg);
+  display: flex; align-items: center; gap: 10px;
+  transition: opacity .28s ease, transform .28s ease;
+}
+#toast::before { content: "✦"; color: #38e1b6; font-size: 15px; }
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- footer / misc ---------- */
+.footer-note { text-align: center; color: var(--muted); font-size: 12px; padding: 10px 0 30px; }
+@media (max-width: 560px) { .page { padding: 16px 14px 50px; } .panel { padding: 16px; } }
+
+/* ---------- failed students ---------- */
+.failed-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 18px; }
+@media (max-width: 640px) { .failed-summary { grid-template-columns: 1fr; } }
+.fs-stat { display: flex; flex-direction: column; align-items: center; padding: 14px 10px; border-radius: 12px; border: 1px solid; }
+.fs-stat-warn { background: linear-gradient(135deg, #fef7ed, #fffbf5); border-color: #fde68a; }
+.fs-stat-warn .fs-num { color: #b45309; }
+.fs-stat-info { background: linear-gradient(135deg, #eff6ff, #f5f9ff); border-color: #bfdbfe; }
+.fs-stat-info .fs-num { color: #1d4ed8; }
+.fs-stat-accent { background: linear-gradient(135deg, #f0fdf4, #f5fef8); border-color: #a7f3d0; }
+.fs-stat-accent .fs-num { color: #047857; }
+.fs-num { font-size: 28px; font-weight: 800; line-height: 1; }
+.fs-label { font-size: 11.5px; color: #6b7280; margin-top: 5px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.failed-list { display: flex; flex-direction: column; gap: 12px; max-height: 520px; overflow-y: auto; padding-right: 4px; }
+.failed-list::-webkit-scrollbar { width: 5px; } .failed-list::-webkit-scrollbar-track { background: transparent; } .failed-list::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
+.failed-card { background: #fff; border: 1px solid #e5e7eb; border-left: 3px solid #f59e0b; border-radius: 12px; padding: 14px 16px; transition: box-shadow .2s ease, border-color .2s ease; }
+.failed-card:hover { box-shadow: 0 2px 12px rgba(245,158,11,.1); border-left-color: #d97706; }
+.fc-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.fc-ident { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.fc-usn { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 13px; font-weight: 700; color: #1f2937; background: #f3f4f6; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+.fc-name { font-size: 13px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fc-badges { display: flex; gap: 6px; flex-shrink: 0; }
+.fc-subjects { display: flex; flex-direction: column; gap: 6px; }
+.fc-sub { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #fafafa; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 12px; }
+.fc-sub-code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-weight: 700; color: #374151; font-size: 11.5px; background: #e5e7eb; padding: 2px 6px; border-radius: 4px; }
+.fc-sub-name { color: #6b7280; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.fc-marks { display: flex; gap: 8px; margin-left: auto; flex-shrink: 0; }
+.fc-marks span { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-weight: 700; font-size: 11.5px; padding: 2px 6px; border-radius: 4px; }
+.fc-m-int { background: #dbeafe; color: #1e40af; }
+.fc-m-ext { background: #fce7f3; color: #be185d; }
+.fc-m-tot { background: #fef3c7; color: #92400e; }
+
+/* ---------- revaluation ---------- */
+.rv-student-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 16px; overflow: hidden; }
+.rv-student-header { background: linear-gradient(135deg, #1C7A5E 0%, #123D2E 100%); color: #fff; padding: 14px 18px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.rv-student-header .rv-usn { font-weight: 800; font-size: 1rem; }
+.rv-student-header .rv-name { font-size: .85rem; opacity: .85; }
+.rv-student-header .rv-badge { font-size: .75rem; padding: 3px 8px; border-radius: 6px; font-weight: 700; margin-left: auto; }
+.rv-badge-improved { background: #D1FAE5; color: #065F46; }
+.rv-badge-nochange { background: #E5E7EB; color: #374151; }
+.rv-badge-decreased { background: #FEE2E2; color: #991B1B; }
+
+.rv-summary-row { display: flex; gap: 10px; padding: 10px 18px; background: #f9fafb; border-bottom: 1px solid var(--line); flex-wrap: wrap; font-size: .82rem; }
+.rv-summary-row .rv-sum-item { padding: 4px 10px; border-radius: 6px; font-weight: 600; }
+.rv-sum-orig { background: #FEF3C7; color: #92400E; }
+.rv-sum-new { background: #D1FAE5; color: #065F46; }
+.rv-sum-change { background: #DBEAFE; color: #1E40AF; }
+
+.rv-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.rv-table th { background: var(--header-bg); color: #fff; padding: 8px 10px; text-align: left; font-weight: 600; white-space: nowrap; }
+.rv-table td { padding: 7px 10px; border-bottom: 1px solid var(--line); font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: .8rem; }
+.rv-table tr:last-child td { border-bottom: none; }
+.rv-chg-pos { color: #059669; font-weight: 700; }
+.rv-chg-neg { color: #DC2626; font-weight: 700; }
+.rv-chg-zero { color: #6B7280; }
+.rv-status-improved { background: #D1FAE5; color: #065F46; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: .75rem; }
+.rv-status-decreased { background: #FEE2E2; color: #991B1B; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: .75rem; }
+.rv-status-nochange { background: #E5E7EB; color: #374151; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: .75rem; }
+.rv-status-newpass { background: #D1FAE5; color: #065F46; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: .75rem; border: 1px solid #059669; }
+
+.rv-highlight-box { padding: 10px 14px; border-radius: 10px; margin-bottom: 8px; font-size: .83rem; }
+.rv-hl-improved { background: #ECFDF5; border-left: 3px solid #059669; }
+.rv-hl-changed { background: #EFF6FF; border-left: 3px solid #2563EB; }
+.rv-hl-nochange { background: #F9FAFB; border-left: 3px solid #9CA3AF; }
+
+/* ---------- student record overlay ---------- */
+.sr-overlay { position: fixed; inset: 0; z-index: 9000; background: #f3f4f6; overflow-y: auto; display: none; }
+.sr-overlay.open { display: block; }
+.sr-topbar { position: sticky; top: 0; z-index: 10; background: #fff; border-bottom: 1px solid #e5e7eb; padding: 12px 24px; display: flex; align-items: center; gap: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.sr-topbar h2 { font-size: 1rem; font-weight: 700; color: #111827; margin: 0; flex: 1; }
+.sr-close { background: none; border: 1px solid #d1d5db; border-radius: 8px; padding: 6px 14px; cursor: pointer; font-weight: 600; font-size: .82rem; color: #374151; }
+.sr-close:hover { background: #f3f4f6; }
+
+.sr-body { max-width: 1100px; margin: 0 auto; padding: 20px 24px 40px; }
+
+/* student header card */
+.sr-header { background: linear-gradient(135deg, #059669 0%, #065F46 100%); border-radius: 16px; padding: 30px 36px; color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; box-shadow: 0 6px 24px rgba(5,150,105,.3); }
+.sr-header-left h2 { font-size: 1.8rem; font-weight: 900; letter-spacing: .03em; margin: 0; text-transform: uppercase; line-height: 1.2; }
+.sr-header-left .sr-sub { font-size: .88rem; opacity: .85; margin-top: 6px; font-weight: 500; }
+.sr-header-right { text-align: right; }
+.sr-usn-pill { display: inline-block; background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.35); border-radius: 24px; padding: 8px 22px; font-size: 1.05rem; font-weight: 800; letter-spacing: .08em; }
+.sr-sem-count { font-size: .85rem; opacity: .85; margin-top: 8px; font-weight: 500; }
+
+/* semester summary strip */
+.sr-sem-summary { display: flex; gap: 0; border-radius: 12px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,.06); border: 1px solid #e5e7eb; flex-wrap: wrap; }
+.sr-sem-cell { flex: 1; min-width: 80px; text-align: center; padding: 12px 8px; border-right: 1px solid #e5e7eb; background: #fff; }
+.sr-sem-cell:last-child { border-right: none; }
+.sr-sem-cell .sr-sem-label { font-size: .65rem; font-weight: 700; text-transform: uppercase; color: #6B7280; letter-spacing: .06em; }
+.sr-sem-cell .sr-sem-val { font-size: 1.1rem; font-weight: 800; color: #111827; margin-top: 4px; }
+.sr-sem-cell.sr-cgpa { background: linear-gradient(135deg, #059669, #065F46); color: #fff; }
+.sr-sem-cell.sr-cgpa .sr-sem-label { color: #A7F3D0; }
+.sr-sem-cell.sr-cgpa .sr-sem-val { color: #fff; }
+.sr-sem-cell.sr-backlogs { background: #FEF3C7; }
+.sr-sem-cell.sr-backlogs .sr-sem-val { color: #92400E; }
+
+/* semester card */
+.sr-sem-card { background: #fff; border-radius: 14px; border: 1px solid #e5e7eb; margin-bottom: 18px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.04); }
+.sr-sem-card-head { background: linear-gradient(135deg, #1C7A5E 0%, #123D2E 100%); color: #fff; padding: 14px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.sr-sem-card-head .sr-sch-label { font-weight: 800; font-size: .95rem; }
+.sr-sem-card-head .sr-sch-year { font-size: .82rem; opacity: .8; }
+.sr-sem-card-head .sr-sch-sgpa { margin-left: auto; background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.3); border-radius: 8px; padding: 4px 12px; font-weight: 700; font-size: .85rem; }
+
+/* subject table */
+.sr-subj-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.sr-subj-table th { background: #F9FAFB; color: #374151; padding: 10px 12px; text-align: left; font-weight: 700; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; border-bottom: 2px solid #E5E7EB; white-space: nowrap; }
+.sr-subj-table td { padding: 9px 12px; border-bottom: 1px solid #F3F4F6; }
+.sr-subj-table tr:last-child td { border-bottom: none; }
+.sr-subj-table tr:hover { background: #F9FAFB; }
+.sr-subj-table .sr-marks { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-weight: 600; text-align: center; }
+.sr-grade { display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: .75rem; }
+.sr-grade-o { background: #D1FAE5; color: #065F46; }
+.sr-grade-aplus, .sr-grade-a { background: #DBEAFE; color: #1E40AF; }
+.sr-grade-bplus, .sr-grade-b { background: #E0E7FF; color: #3730A3; }
+.sr-grade-c { background: #FEF3C7; color: #92400E; }
+.sr-grade-p { background: #F3F4F6; color: #374151; }
+.sr-grade-f { background: #FEE2E2; color: #991B1B; }
+.sr-pill-pass { background: #D1FAE5; color: #065F46; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: .75rem; }
+.sr-pill-fail { background: #FEE2E2; color: #991B1B; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: .75rem; }
+
+/* reval comparison diff */
+.sr-diff-pos { color: #059669; font-weight: 700; }
+.sr-diff-neg { color: #DC2626; font-weight: 700; }
+.sr-diff-zero { color: #9CA3AF; }
+
+/* loading */
+.sr-loading { text-align: center; padding: 60px 20px; color: #6B7280; }
+.sr-loading .sr-spinner { display: inline-block; width: 36px; height: 36px; border: 3px solid #E5E7EB; border-top-color: #059669; border-radius: 50%; animation: spin .7s linear infinite; margin-bottom: 12px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* responsive */
+@media (max-width: 700px) {
+  .sr-header { padding: 20px; flex-direction: column; text-align: center; }
+  .sr-header-right { text-align: center; }
+  .sr-sem-summary { flex-direction: column; }
+  .sr-sem-cell { border-right: none; border-bottom: 1px solid #e5e7eb; }
+  .sr-body { padding: 12px; }
+  .sr-subj-table { display: block; overflow-x: auto; }
+}
+
+#browse_table tr[onclick]:hover { background: #ECFDF5 !important; }
+
+.sr-diff-pos { color: #059669; }
+.sr-diff-neg { color: #DC2626; }
+.sr-diff-zero { color: #9CA3AF; }
+
+/* ---------- print styles ---------- */
+@media print {
+  body * { visibility: hidden; }
+  #sr_result_area, #sr_result_area * { visibility: visible; }
+  #sr_result_area { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; }
+  .sr-header { box-shadow: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sr-sem-card-head { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sr-sem-cell.sr-cgpa { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sr-sem-cell.sr-backlogs { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sr-grade, .sr-pill-pass, .sr-pill-fail { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sr-subj-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sr-subj-table tr:nth-child(even) { background: #F9FAFB; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .panel { box-shadow: none; border: 1px solid #E5E7EB; break-inside: avoid; }
+  .sr-sem-card { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <div class="brand-row">
+      <div class="brand-l">
+        <div class="brand-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+        </div>
+        <div>
+          <h1>VTU Result Fetcher</h1>
+          <div class="brand-sub">Bulk result scraping · CAPTCHA auto-solve · MongoDB archive</div>
+        </div>
+      </div>
+      <div class="brand-r">
+        <span id="db_badge" class="db-badge off"><span class="dot"></span>MongoDB …</span>
+      </div>
+    </div>
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+      <button class="tab-btn" data-tab="analytics">Analytics</button>
+      <button class="tab-btn" data-tab="browse">Browse Records</button>
+      <button class="tab-btn" data-tab="revaluation">Revaluation</button>
+    </nav>
+  </div>
+</header>
+
+<div class="page">
+
+<!-- ================= DASHBOARD ================= -->
+<section id="tab-dashboard" class="tab-page active">
+
+  <div class="stat-strip">
+    <div class="stat-card hero"><div class="k">USNs ready</div><div class="v" id="stat_usns">0</div></div>
+    <div class="stat-card"><div class="k">Current run</div><div class="v" id="stat_run" style="font-size:17px;line-height:1.4;">—</div></div>
+    <div class="stat-card"><div class="k">Saved batches</div><div class="v" id="stat_batches">0</div></div>
+  </div>
+
+  <div class="panel">
+    <h2><span class="h2-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Build USN list</h2>
+    <div class="grid-2">
+      <div>
+        <h3>Range generator</h3>
+        <div class="row">
+          <div style="flex: 1.2;"><label class="lbl" for="prefix">Prefix</label><input type="text" id="prefix" placeholder="1GD24CS"></div>
+          <div><label class="lbl" for="range_from">From</label><input type="number" id="range_from" min="1" max="999" placeholder="1"></div>
+          <div><label class="lbl" for="range_to">To</label><input type="number" id="range_to" min="1" max="999" placeholder="120"></div>
+          <div style="flex: 0 0 auto;"><button class="btn" id="gen_btn">Generate</button></div>
+        </div>
+        <div class="preview-count" id="gen_preview"></div>
+      </div>
+      <div>
+        <h3>Manual add <span style="font-weight:500;color:var(--muted);text-transform:none;">(paste comma / newline separated USNs)</span></h3>
+        <textarea id="manual_text" rows="3" placeholder="1GD23CS101, 1GD23CS102"></textarea>
+        <div class="row" style="margin-top:10px;">
+          <button class="btn ghost" id="manual_add_btn">Add to list</button>
+          <button class="btn ghost" id="import_btn">Import from students.csv</button>
+          <button class="btn ghost" id="clear_btn" title="Clears the current list so the next import loads fresh (no merge)">Refresh list</button>
+        </div>
+      </div>
+    </div>
+    <div class="preview-count" id="usn_count"></div>
+    <div id="chip_area"></div>
+    <div id="invalid_area" class="invalid-list"></div>
+  </div>
+
+  <div class="panel">
+    <h2><span class="h2-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>Fetch</h2>
+    <label class="lbl" for="vtu_url">VTU results URL</label>
+    <div class="row">
+      <input type="text" id="vtu_url" value="https://results.vtu.ac.in/JJEcbcs25/index.php">
+      <div style="flex:0 0 auto;"><button class="btn" id="start_btn">Start Fetching</button></div>
+      <div style="flex:0 0 auto;"><button class="btn warn" id="stop_btn" disabled>Stop</button></div>
+      <div style="flex:0 0 auto;"><button class="btn ghost" id="retry_btn" style="display:none;" title="Loads only the USNs that failed in the last run and starts fetching them">Retry failed</button></div>
+    </div>
+
+    <div class="status-bar" id="status_bar">
+      <div class="stat-mini"><span class="k">Elapsed</span><span class="v" id="timer_display">00:00</span></div>
+      <div class="stat-mini"><span class="k">Progress</span><span class="v green" id="progress_display">0/0</span></div>
+      <div class="prog-wrap">
+        <div class="prog-bar"><div class="prog-fill" id="prog_bar"></div></div>
+        <div class="prog-label"><span id="prog_pct">0%</span><span id="run_display">—</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2><span class="h2-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></span>Live log</h2>
+    <div class="log-box">
+      <div class="log-head"><div class="log-dots"><i></i><i></i><i></i></div><div class="t">VTU-SCRAPER · TERMINAL</div></div>
+      <pre id="log">Welcome. Build a USN list and click "Start Fetching".</pre>
+    </div>
+  </div>
+
+  <div class="panel" id="actions_panel" style="display:none;">
+    <h2><span class="h2-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>Result ready</h2>
+    <div class="row" style="flex-wrap:wrap;">
+      <a class="btn" id="download_btn" href="/download" style="display:none;text-decoration:none;">Download Excel</a>
+      <button class="btn ghost" id="save_db_btn" style="display:none;">Save to Database</button>
+      <span id="save_db_note" style="color:var(--muted);font-size:13px;"></span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ANALYTICS ================= -->
+<section id="tab-analytics" class="tab-page">
+  <div class="panel">
+    <h2><span class="h2-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg></span>Batch analytics</h2>
+    <div class="row">
+      <select id="an_batch_sel"><option value="">— select a saved batch —</option></select>
+      <div style="flex:0 0 auto;"><button class="btn ghost" id="an_refresh_btn">Refresh</button></div>
+    </div>
+    <div id="an_empty" style="color:var(--muted);margin-top:14px;">No batches saved yet. Fetch results and use "Save to Database".</div>
+  </div>
+
+  <div id="an_content" style="display:none;">
+    <div class="rank-cards">
+      <div class="rank-card hero"><div class="rk">Top scorer</div><div class="rv" id="an_top">—</div><div class="ru" id="an_top_usn"></div></div>
+      <div class="rank-card"><div class="rk">Batch average</div><div class="rv" id="an_avg">—</div><div class="ru">mean SGPA</div></div>
+      <div class="rank-card"><div class="rk">Lowest</div><div class="rv" id="an_low">—</div><div class="ru" id="an_low_usn"></div></div>
+    </div>
+    <div class="grid-2">
+      <div class="panel"><h3>Percentage distribution</h3><div class="chart-box"><canvas id="chart_perc"></canvas></div></div>
+      <div class="panel"><h3>Result breakdown</h3><div class="chart-box"><canvas id="chart_pie"></canvas></div></div>
+    </div>
+    <div class="panel"><h3>Subject-wise average (total marks)</h3><div class="chart-box"><canvas id="chart_subj"></canvas></div></div>
+
+    <div class="panel" id="an_failed_panel" style="display:none;">
+      <h3 style="margin:0 0 14px;">Students with Backlogs</h3>
+      <div id="an_failed_content"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= BROWSE ================= -->
+<section id="tab-browse" class="tab-page">
+
+  <!-- Browse view: filters + table -->
+  <div id="browseTableView">
+    <div class="panel">
+      <h2><span class="h2-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></span>Browse saved records</h2>
+      <div class="row" style="flex-wrap:wrap;">
+        <div><label class="lbl">Department</label><select id="flt_dept"></select></div>
+        <div><label class="lbl">Semester</label><select id="flt_sem"></select></div>
+        <div><label class="lbl">Scheme</label><select id="flt_scheme"></select></div>
+        <div><label class="lbl">Year</label><select id="flt_year"></select></div>
+        <div style="flex:0 0 auto;align-self:flex-end;"><button class="btn" id="export_btn" disabled>Export to Excel</button></div>
+        <div style="flex:0 0 auto;align-self:flex-end;"><button class="btn" id="sr_toggle_btn" style="white-space:nowrap;background:linear-gradient(135deg,#059669,#065F46);color:#fff;border-color:transparent;">&#128269; Student Record</button></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="row" style="margin-bottom:12px;flex-wrap:wrap;">
+        <span class="preview-count" id="browse_count" style="margin:0;"></span>
+        <div style="flex:1;"></div>
+        <label class="lbl" style="margin:0 6px 0 0;align-self:center;">Rows</label>
+        <select id="page_size" style="width:auto;">
+          <option value="20">20</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="all">All</option>
+        </select>
+        <button class="btn ghost" id="browse_prev" style="flex:0 0 auto;">&#8249; Prev</button>
+        <span class="preview-count" id="browse_pager" style="margin:0 10px;"></span>
+        <button class="btn ghost" id="browse_next" style="flex:0 0 auto;">Next &#8250;</button>
+      </div>
+      <div class="tbl-wrap"><table class="data" id="browse_table"></table></div>
+    </div>
+  </div>
+
+  <!-- Student Record dashboard (hidden by default) -->
+  <div id="browseStudentView" style="display:none;">
+    <div class="panel">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <button class="btn ghost" id="sr_back_btn" style="flex:0 0 auto;">&#8592; Back</button>
+        <div style="flex:1;min-width:200px;">
+          <input id="sr_usn_input" placeholder="Enter USN (e.g. 1GD23CS001)" style="width:100%;padding:12px 16px;border:2px solid #E5E7EB;border-radius:12px;font-size:1rem;font-family:monospace;font-weight:700;letter-spacing:.06em;text-transform:uppercase;outline:none;transition:border-color .2s;" maxlength="10">
+        </div>
+        <button class="btn" id="sr_open_btn" style="padding:12px 24px;background:linear-gradient(135deg,#059669,#065F46);color:#fff;border:none;border-radius:12px;font-weight:700;">Search</button>
+        <button class="btn ghost" id="sr_print_btn" style="flex:0 0 auto;display:none;" onclick="window.print()">&#128424; Print PDF</button>
+      </div>
+    </div>
+    <div id="sr_result_area"></div>
+  </div>
+
+</section>
+
+<!-- ================= REVALUATION ================= -->
+<section id="tab-revaluation" class="tab-page">
+  <div class="panel">
+    <h2><span class="h2-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></span>Revaluation Result Comparison</h2>
+    <p style="color:var(--ink-soft);font-size:.85rem;margin:0 0 14px;">Fetch revaluation results using the same USNs and compare with the original marks.</p>
+
+    <div class="row" style="flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+      <div style="flex:1;min-width:200px;">
+        <label class="lbl">Original Batch</label>
+        <select id="rv_batch_sel" style="width:100%;"></select>
+      </div>
+      <div style="flex:1;min-width:200px;">
+        <label class="lbl">Revaluation URL</label>
+        <input id="rv_url" placeholder="https://results.vtu.ac.in/..." style="width:100%;">
+      </div>
+    </div>
+    <div class="row" style="flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+      <div style="flex:1;min-width:200px;">
+        <label class="lbl">USNs (comma or newline separated)</label>
+        <textarea id="rv_usns" rows="3" placeholder="1GD23CS001&#10;1GD23CS002" style="width:100%;font-family:monospace;"></textarea>
+      </div>
+    </div>
+    <div class="row" style="gap:10px;margin-bottom:14px;">
+      <button class="btn" id="rv_fetch_btn" disabled>Fetch Revaluation &amp; Compare</button>
+      <button class="btn red" id="rv_stop_btn" disabled>Stop</button>
+      <button class="btn ghost" id="rv_export_btn" disabled>Export Comparison</button>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="panel" id="rv_progress_panel" style="display:none;">
+    <h2>Fetching revaluation results...</h2>
+    <div class="progress-bar"><div class="progress-fill" id="rv_progress_fill"></div></div>
+    <div class="row" style="justify-content:space-between;margin-top:6px;">
+      <span class="preview-count" id="rv_progress_count"></span>
+      <span class="preview-count" id="rv_progress_time"></span>
+    </div>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="stat-strip" id="rv_summary_strip" style="display:none;grid-template-columns:repeat(3,1fr);">
+    <div class="stat-card" style="border-left:4px solid #D97706;">
+      <span class="k">Original Total</span>
+      <span class="v" id="rv_orig_total">--</span>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #059669;">
+      <span class="k">Reval Total</span>
+      <span class="v" id="rv_new_total">--</span>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #2563EB;">
+      <span class="k">Marks Change</span>
+      <span class="v" id="rv_total_change">--</span>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #7C3AED;">
+      <span class="k">Improved</span>
+      <span class="v" id="rv_improved_count">--</span>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #6B7280;">
+      <span class="k">No Change</span>
+      <span class="v" id="rv_nochange_count">--</span>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #DC2626;">
+      <span class="k">Decreased</span>
+      <span class="v" id="rv_decreased_count">--</span>
+    </div>
+  </div>
+
+  <!-- Change Highlights -->
+  <div class="panel" id="rv_highlights_panel" style="display:none;">
+    <h2><span class="h2-ico" style="font-size:1.1rem;">&#127881;</span>Important Changes</h2>
+    <div id="rv_highlights"></div>
+  </div>
+
+  <!-- Per-Student Comparison -->
+  <div id="rv_student_cards" style="display:none;"></div>
+
+  <!-- No-data placeholder -->
+  <div class="panel" id="rv_empty" style="display:none;">
+    <p style="text-align:center;color:var(--ink-soft);padding:30px 0;">Select an original batch and provide the revaluation URL to start comparison.</p>
+  </div>
+</section>
+
+</div>
+
+<div class="footer-note">VTU Result Fetcher · educational use only · v2.1</div>
+
+<!-- ================= SAVE-TO-DB MODAL ================= -->
+<div class="modal-overlay" id="db_modal">
+  <div class="modal">
+    <h3 style="margin:0 0 4px;">Save to Database</h3>
+    <p style="color:var(--muted);font-size:13px;margin:0 0 18px;">Archives the current fetch into MongoDB — pick an existing batch to merge into, or create a new one.</p>
+    <div class="row" style="margin-bottom:14px;">
+      <div><label class="lbl">Store into</label>
+        <select id="db_batch_sel"><option value="">— create a new batch —</option></select>
+      </div>
+    </div>
+    <div class="row" style="margin-bottom:14px;">
+      <div><label class="lbl">Year</label><input type="text" id="db_year" placeholder="2025"></div>
+      <div><label class="lbl">Scheme</label><input type="text" id="db_scheme" placeholder="2022"></div>
+    </div>
+    <div class="row" style="margin-bottom:20px;">
+      <div><label class="lbl">Semester</label><input type="text" id="db_semester" placeholder="3"></div>
+      <div><label class="lbl">Department</label><input type="text" id="db_department" placeholder="CSE"></div>
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="db_cancel_btn" style="flex:0 0 auto;">Cancel</button>
+      <button class="btn" id="db_save_btn" style="flex:0 0 auto;">Save batch</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const socket = io();
+const $ = id => document.getElementById(id);
+
+/* ---------------- state ---------------- */
+let usnList = [];            // validated working list
+let lastFailedUsns = [];     // USNs that failed in the most recent run
+let invalidList = [];
+let batches = [];
+let batchStudents = {};      // batch_id -> students[]
+let currentBatch = null;     // analytics selection
+let browseRows = [];         // merged browse rows
+let browsePage = 1;
+let pageSize = 20;
+let timerInterval = null;
+let fetchStartTime = null;
+let charts = {};
+let fetchTotal = null;
+
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 3500);
+}
+
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function logMsg(msg) {
+  const box = $("log");
+  const lines = String(msg).split("\n");
+  let html = "";
+  lines.forEach(ln => {
+    let cls = "";
+    if (/^\s*\[Success\]|\[Success\]|Scraped/.test(ln)) cls = " ok";
+    else if (/^\s*\[Error\]/i.test(ln) || /FAILED|not found|Invalid/i.test(ln)) cls = " err";
+    else if (/^\s*\[Warn\]/.test(ln)) cls = " warn";
+    else if (/^\s*\[Info\]|Attempt \d|Stopped|CAPTCHA predicted/.test(ln)) cls = " info";
+    else if (/^\s*\[SUBJECTS\]/.test(ln)) cls = " subj";
+    else if (/^---|Processing USN|SCRAPING/.test(ln)) cls = " head";
+    html += `<span class="l${cls}">${esc(ln) || "&#8203;"}</span>\n`;
+  });
+  box.insertAdjacentHTML("beforeend", html);
+  box.scrollTop = box.scrollHeight;
+}
+
+function setProgress(done, total) {
+  fetchTotal = total || fetchTotal;
+  const pct = fetchTotal ? Math.min(100, Math.round((done / fetchTotal) * 100)) : 0;
+  $("prog_bar").style.width = pct + "%";
+  $("prog_pct").textContent = pct + "%";
+  $("progress_display").textContent = done + "/" + (fetchTotal || "?");
+}
+
+/* ---------------- custom dropdowns ---------------- */
+const cdropState = new WeakMap();
+const enhancedSelects = new Set();
+
+function enhanceSelect(sel) {
+  if (cdropState.has(sel) || !sel) return;
+  sel.style.display = "none";
+
+  const wrap = document.createElement("div");
+  wrap.className = "cdrop";
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "cdrop-btn";
+  const lbl = document.createElement("span");
+  lbl.className = "lbl";
+  btn.appendChild(lbl);
+  btn.insertAdjacentHTML("beforeend",
+    '<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>');
+
+  const menu = document.createElement("div");
+  menu.className = "cdrop-menu";
+  wrap.appendChild(btn);
+  wrap.appendChild(menu);
+
+  function syncLabel() {
+    const o = sel.options[sel.selectedIndex];
+    lbl.textContent = o ? o.text : "\u00a0";
+    [...menu.children].forEach((li, i) => li.classList.toggle("sel", i === sel.selectedIndex));
+  }
+
+  function render() {
+    menu.innerHTML = "";
+    [...sel.options].forEach((o, i) => {
+      const li = document.createElement("div");
+      li.className = "cdrop-opt" + (o.selected ? " sel" : "");
+      li.textContent = o.text;
+      li.title = o.text;
+      li.addEventListener("click", () => {
+        sel.selectedIndex = i;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+        wrap.classList.remove("open");
+      });
+      menu.appendChild(li);
+    });
+    syncLabel();
+  }
+
+  function open() { render(); wrap.classList.add("open"); }
+  function close() { wrap.classList.remove("open"); }
+
+  btn.addEventListener("click", e => {
+    e.stopPropagation();
+    wrap.classList.contains("open") ? close() : open();
+  });
+
+  sel.addEventListener("change", syncLabel);
+  document.addEventListener("click", () => close());
+
+  new MutationObserver(render).observe(sel, { childList: true, subtree: true });
+  render();
+
+  sel.insertAdjacentElement("afterend", wrap);
+  if (sel.style.width === "auto") wrap.style.flex = "0 0 auto";
+
+  cdropState.set(sel, { wrap, label: lbl, menu, syncLabel });
+  enhancedSelects.add(sel);
+}
+
+function syncAllCustomSelects() {
+  enhancedSelects.forEach(sel => {
+    const s = cdropState.get(sel);
+    if (s && s.syncLabel) s.syncLabel();
+  });
+}
+
+["an_batch_sel", "flt_dept", "flt_sem", "flt_scheme", "flt_year", "page_size", "db_batch_sel"].forEach(id => enhanceSelect($(id)));
+
+/* ---------------- tabs ---------------- */
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tab-page").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    $("tab-" + btn.dataset.tab).classList.add("active");
+    if (btn.dataset.tab === "analytics") loadBatches();
+    if (btn.dataset.tab === "browse") loadBatches();
+    if (btn.dataset.tab === "revaluation") loadRevalBatches();
+  });
+});
+
+/* ---------------- USN list building ---------------- */
+const USN_PATTERN = /^[A-Z0-9]{10}$/;
+
+function validateUSNs(raw) {
+  const lines = raw.replace(/,/g, "\n").split("\n").map(x => x.trim().toUpperCase()).filter(x => x.length > 0);
+  const valid = [], invalid = [];
+  lines.forEach(u => USN_PATTERN.test(u) ? valid.push(u) : invalid.push(u));
+  return { valid, invalid };
+}
+
+$("gen_btn").addEventListener("click", () => {
+  const prefix = $("prefix").value.trim().toUpperCase();
+  const from = parseInt($("range_from").value, 10);
+  const to = parseInt($("range_to").value, 10);
+  if (!/^\d[A-Z]{2}\d{2}[A-Z]{2}$/.test(prefix)) { toast("Invalid prefix — expected format like 1GD24CS"); return; }
+  if (!from || !to || from < 1 || to < from || to > 999) { toast("Invalid range — use 1 to 999"); return; }
+  const generated = [];
+  for (let i = from; i <= to; i++) generated.push(prefix + String(i).padStart(3, "0"));
+  usnList = usnList.concat(generated);
+  usnList = [...new Set(usnList)];
+  $("gen_preview").textContent = `${to - from + 1} USNs generated (${prefix}${String(from).padStart(3,"0")} – ${prefix}${String(to).padStart(3,"0")})`;
+  renderList();
+});
+
+$("manual_add_btn").addEventListener("click", () => {
+  const raw = $("manual_text").value;
+  if (!raw.trim()) return;
+  const { valid, invalid } = validateUSNs(raw);
+  usnList = [...new Set(usnList.concat(valid))];
+  invalidList = invalid;
+  $("manual_text").value = "";
+  renderList();
+  if (invalid.length) toast("Skipped " + invalid.length + " invalid USN(s) — see flagged list below");
+});
+
+$("import_btn").addEventListener("click", () => {
+  logMsg("Importing from students.csv...\n");
+  socket.emit("import-csv");
+});
+
+$("clear_btn").addEventListener("click", () => {
+  usnList = [];
+  invalidList = [];
+  $("manual_text").value = "";
+  $("gen_preview").textContent = "";
+  renderList();
+  toast("List refreshed/cleared — importing again will not merge with old USNs");
+});
+
+function renderList() {
+  const area = $("chip_area");
+  area.innerHTML = "";
+  usnList.forEach(u => {
+    const c = document.createElement("span");
+    c.className = "chip";
+    c.textContent = u;
+    const x = document.createElement("span");
+    x.className = "x";
+    x.textContent = "×";
+    x.onclick = () => { usnList = usnList.filter(v => v !== u); renderList(); };
+    c.appendChild(x);
+    area.appendChild(c);
+  });
+  $("usn_count").textContent = `${usnList.length} USN(s) ready` + (usnList.length ? "" : " — generate a range or add manually");
+  $("invalid_area").textContent = invalidList.length ? "Invalid entries (skipped): " + invalidList.join(", ") : "";
+  $("start_btn").disabled = usnList.length === 0;
+  $("stat_usns").textContent = usnList.length;
+}
+
+/* ---------------- fetch ---------------- */
+$("start_btn").addEventListener("click", () => {
+  const url = $("vtu_url").value.trim();
+  if (!url) { toast("Enter the VTU results URL"); return; }
+  if (usnList.length === 0) { toast("No USNs in the list"); return; }
+  $("log").textContent = "";
+  $("actions_panel").style.display = "none";
+  $("download_btn").style.display = "none";
+  $("save_db_btn").style.display = "none";
+  logMsg("Fetching " + usnList.length + " USN(s):\n" + usnList.join("\n") + "\n\n");
+  socket.emit("start-fetch", { usns: usnList, url: url });
+});
+
+$("stop_btn").addEventListener("click", () => {
+  socket.emit("stop-fetch");
+  $("stop_btn").disabled = true;
+  $("stop_btn").innerHTML = "Stopping…";
+});
+
+$("download_btn").addEventListener("click", () => {
+  logMsg("[Info] Downloading vtu_results.xlsx\n");
+});
+
+/* ---------------- save to DB ---------------- */
+$("save_db_btn").addEventListener("click", () => {
+  $("db_modal").classList.add("open");
+  socket.emit("get-batches");
+  populateDbBatchSel();
+});
+$("db_cancel_btn").addEventListener("click", () => $("db_modal").classList.remove("open"));
+
+function populateDbBatchSel() {
+  const sel = $("db_batch_sel");
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">— create a new batch —</option>';
+  batches.forEach(b => {
+    const o = document.createElement("option");
+    o.value = b._id;
+    o.textContent = `${b.department || "?"} — Sem ${b.semester || "?"} — ${b.scheme || "?"} — ${b.year || "?"} (${b.student_count} students)`;
+    sel.appendChild(o);
+  });
+  if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  updateMergeUI();
+  syncAllCustomSelects();
+}
+
+function updateMergeUI() {
+  const merging = !!$("db_batch_sel").value;
+  const b = merging ? batches.find(x => x._id === $("db_batch_sel").value) : null;
+  ["db_year", "db_scheme", "db_semester", "db_department"].forEach(id => { $(id).disabled = merging; $(id).required = !merging; });
+  if (b) {
+    $("db_year").value = b.year || "";
+    $("db_scheme").value = b.scheme || "";
+    $("db_semester").value = b.semester || "";
+    $("db_department").value = b.department || "";
+  }
+  $("db_save_btn").textContent = merging ? "Merge into this batch" : "Save batch";
+}
+$("db_batch_sel").addEventListener("change", updateMergeUI);
+
+$("db_save_btn").addEventListener("click", () => {
+  const target = $("db_batch_sel").value;
+  if (!target && (!$("db_year").value.trim() || !$("db_scheme").value.trim() || !$("db_semester").value.trim() || !$("db_department").value.trim())) {
+    toast("Fill all fields, or pick an existing batch to merge into"); return;
+  }
+  const payload = {
+    year: $("db_year").value.trim(),
+    scheme: $("db_scheme").value.trim(),
+    semester: $("db_semester").value.trim(),
+    department: $("db_department").value.trim(),
+    target_batch_id: target,
+  };
+  socket.emit("save-to-db", payload);
+  $("db_modal").classList.remove("open");
+  logMsg(target ? `[DB] Merging current fetch into batch ${target}…\n` : "[DB] Saving batch to MongoDB…\n");
+});
+
+/* ---------------- socket events ---------------- */
+socket.on("connect", () => socket.emit("get-db-status"));
+
+socket.on("db-status", data => {
+  const b = $("db_badge");
+  if (data.connected) { b.textContent = "MongoDB connected"; b.className = "db-badge ok"; }
+  else { b.textContent = "MongoDB off"; b.className = "db-badge off"; }
+});
+
+socket.on("csv-data", data => {
+  $("manual_text").value = data.usns;
+  const { valid, invalid } = validateUSNs(data.usns);
+  usnList = [...new Set(usnList.concat(valid))];
+  invalidList = invalidList.concat(invalid);
+  renderList();
+  logMsg(`Imported ${valid.length} USN(s) into the list below.\n`);
+  if (invalid.length) logMsg(`Skipped ${invalid.length} invalid entry/entries from CSV.\n`);
+});
+socket.on("log-message", msg => logMsg(msg.data));
+socket.on("fetch-started", data => {
+  $("status_bar").classList.add("show");
+  $("stop_btn").disabled = false;
+  $("stop_btn").textContent = "Stop";
+  $("start_btn").disabled = true;
+  $("retry_btn").style.display = "none";
+  fetchStartTime = Date.now();
+  fetchTotal = data.total || null;
+  $("timer_display").textContent = "00:00";
+  setProgress(0, fetchTotal);
+  $("run_display").textContent = "#" + (data.run_id || "—");
+  $("stat_run").textContent = data.run_id || "—";
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    if (!fetchStartTime) return;
+    const el = Math.floor((Date.now() - fetchStartTime) / 1000);
+    const m = String(Math.floor(el / 60)).padStart(2, "0");
+    const s = String(el % 60).padStart(2, "0");
+    $("timer_display").textContent = m + ":" + s;
+  }, 1000);
+});
+socket.on("fetch-progress", data => {
+  const done = (data.success || 0) + (data.fail || 0);
+  setProgress(done, data.total);
+});
+socket.on("fetch-complete", data => {
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  $("stop_btn").disabled = true;
+  $("start_btn").disabled = usnList.length === 0;
+  $("stop_btn").textContent = "Stop";
+  if (data) {
+    const done = (data.success || 0) + (data.fail || 0);
+    setProgress(done, data.total);
+    $("progress_display").textContent = done + "/" + data.total;
+  }
+  logMsg("\n--- Fetch Complete ---\n");
+  lastFailedUsns = (data && data.failed) || [];
+  const rb = $("retry_btn");
+  if (rb) {
+    rb.textContent = lastFailedUsns.length ? `Retry failed (${lastFailedUsns.length})` : "Retry failed";
+    rb.style.display = lastFailedUsns.length ? "inline-flex" : "none";
+  }
+  if (lastFailedUsns.length) {
+    logMsg(`[Info] ${lastFailedUsns.length} USN(s) failed: ${lastFailedUsns.join(", ")}\n`);
+    toast(`${lastFailedUsns.length} USN(s) failed — use "Retry failed" to re-fetch only those`);
+  }
+});
+$("retry_btn").addEventListener("click", () => {
+  if (!lastFailedUsns.length) { toast("No failed USNs to retry"); return; }
+  usnList = [...lastFailedUsns];
+  renderList();
+  toast(`Loaded ${lastFailedUsns.length} failed USN(s) — fetching only those`);
+  $("start_btn").click();
+});
+socket.on("download-ready", () => {
+  $("actions_panel").style.display = "block";
+  $("download_btn").style.display = "inline-flex";
+  $("save_db_btn").style.display = "inline-flex";
+  logMsg("[Info] Excel ready for download.\n");
+  socket.emit("get-db-status", {}, () => {});
+});
+socket.on("save-to-db-complete", data => {
+  const verb = data.merged ? "Merged into batch" : "Saved new batch";
+  logMsg(`[DB] ${verb} ${data.batch_id} — ${data.added_count} new student(s), total ${data.student_count}.\n`);
+  toast(`${verb} ${data.batch_id}: ${data.added_count} new, ${data.student_count} total`);
+  delete batchStudents[data.batch_id];
+  if (currentBatch === data.batch_id) socket.emit("get-batch-results", { batch_id: data.batch_id });
+  loadBatches();
+});
+
+/* ---------------- analytics & browse data ---------------- */
+function loadBatches() { socket.emit("get-batches"); }
+
+socket.on("batches", data => {
+  batches = data.batches || [];
+  if (data.error) {
+    toast("MongoDB: " + data.error);
+    populateFilters();
+    return;
+  }
+  $("stat_batches").textContent = batches.length;
+
+  const sel = $("an_batch_sel");
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">— select a saved batch —</option>';
+  batches.forEach(b => {
+    const o = document.createElement("option");
+    o.value = b._id;
+    o.textContent = `${b.department || "?"} — Sem ${b.semester || "?"} — ${b.scheme || "?"} — ${b.year || "?"} (${b.student_count} students)`;
+    sel.appendChild(o);
+  });
+  $("an_empty").style.display = batches.length ? "none" : "block";
+  if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  if (currentBatch && batches.some(b => b._id === currentBatch)) {
+    delete batchStudents[currentBatch];
+    socket.emit("get-batch-results", { batch_id: currentBatch });
+  } else if (currentBatch) {
+    currentBatch = null;
+    sel.value = "";
+    $("an_content").style.display = "none";
+  }
+  populateFilters();
+  applyBrowseFilters();
+  populateDbBatchSel();
+
+  /* Fetch student data for ALL batches so Browse tab shows data */
+  batches.forEach(b => {
+    if (!batchStudents[b._id]) {
+      socket.emit("get-batch-results", { batch_id: b._id });
+    }
+  });
+});
+
+$("an_batch_sel").addEventListener("change", e => {
+  if (!e.target.value) { $("an_content").style.display = "none"; return; }
+  currentBatch = e.target.value;
+  if (batchStudents[currentBatch]) {
+    const b = batches.find(x => x._id === currentBatch);
+    if (b) renderAnalytics(b, batchStudents[currentBatch]);
+  } else {
+    socket.emit("get-batch-results", { batch_id: currentBatch });
+  }
+});
+
+$("an_refresh_btn").addEventListener("click", () => {
+  if (currentBatch) delete batchStudents[currentBatch];
+  loadBatches();
+  toast("Refreshing batch data\u2026");
+});
+
+socket.on("batch-results", data => {
+  if (data.error || !data.batch) { toast(data.error || "Batch not found"); return; }
+  batchStudents[data.batch._id] = data.students;
+  if (currentBatch === data.batch._id) renderAnalytics(data.batch, data.students);
+  applyBrowseFilters();
+});
+
+/* ---------------- analytics rendering ---------------- */
+function gradePoint(total) {
+  const m = Number(total);
+  if (isNaN(m)) return null;
+  if (m >= 90) return 10;
+  if (m >= 80) return 9;
+  if (m >= 70) return 8;
+  if (m >= 60) return 7;
+  if (m >= 55) return 6;
+  if (m >= 50) return 5;
+  if (m >= 40) return 4;
+  return 0;
+}
+
+/* SGPA from total marks using VTU grade points.
+   Credits are not scraped, so subjects are weighted equally. */
+function studentSGPA(s) {
+  const pts = (s.subjects || []).map(sub => gradePoint(sub.total)).filter(v => v !== null);
+  if (!pts.length) return null;
+  return pts.reduce((a, b) => a + b, 0) / pts.length;
+}
+
+function renderAnalytics(batch, students) {
+  $("an_content").style.display = "block";
+  $("an_empty").style.display = "none";
+
+  const pct = students.map(s => s.percentage).filter(p => p !== null && p !== undefined);
+  const sorted = students.slice().sort((a, b) => (b.percentage || 0) - (a.percentage || 0));
+  const top = sorted[0], low = sorted[sorted.length - 1];
+  const avg = pct.length ? (pct.reduce((a, b) => a + b, 0) / pct.length).toFixed(2) : "—";
+
+  const sgpaList = students.map(s => ({ s, sg: studentSGPA(s) })).filter(x => x.sg !== null);
+  const sgSorted = sgpaList.slice().sort((a, b) => b.sg - a.sg);
+  const sgTop = sgSorted[0], sgLow = sgSorted[sgSorted.length - 1];
+  const sgAvg = sgpaList.length ? (sgpaList.reduce((a, x) => a + x.sg, 0) / sgpaList.length).toFixed(2) : "—";
+
+  $("an_top").textContent = sgTop ? sgTop.sg.toFixed(2) : "—";
+  $("an_top_usn").textContent = sgTop ? `${sgTop.s.usn} · ${sgTop.s.name || ""} · ${sgTop.s.percentage != null ? sgTop.s.percentage + "%" : "—"}` : "";
+  $("an_avg").textContent = sgAvg + "";
+  $("an_low").textContent = sgLow ? sgLow.sg.toFixed(2) : "—";
+  $("an_low_usn").textContent = sgLow ? `${sgLow.s.usn} · ${sgLow.s.name || ""} · ${sgLow.s.percentage != null ? sgLow.s.percentage + "%" : "—"}` : "";
+
+  const byUsn = sorted.map(s => s.percentage ?? 0);
+  const usnLabels = sorted.map(s => s.usn);
+
+  const bands = { Distinction: 0, "First Class": 0, Pass: 0, Fail: 0 };
+  students.forEach(s => {
+    const p = s.percentage ?? 0;
+    if (p >= 70) bands.Distinction++;
+    else if (p >= 60) bands["First Class"]++;
+    else if (p >= 40) bands.Pass++;
+    else bands.Fail++;
+  });
+
+  const subjMap = {};
+  students.forEach(s => (s.subjects || []).forEach(sub => {
+    const t = sub.total;
+    if (typeof t !== "number" && t === null) return;
+    if (!subjMap[sub.code]) subjMap[sub.code] = [];
+    subjMap[sub.code].push(Number(t) || 0);
+  }));
+  const subjLabels = Object.keys(subjMap);
+  const subjAvg = subjLabels.map(c => (subjMap[c].reduce((a, b) => a + b, 0) / subjMap[c].length).toFixed(1));
+
+  const accent = "#1C7A5E", soft = "#7FD9B2", gray = "#C2C9C3", err = "#E5484D", warn = "#E0A630";
+
+  destroyChart("chart_perc");
+  charts.chart_perc = new Chart($("chart_perc"), {
+    type: "bar",
+    data: { labels: usnLabels, datasets: [{ label: "Percentage", data: byUsn, backgroundColor: accent, borderRadius: 5, maxBarThickness: 34 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, max: 100, grid: { color: "#eef1f5" }, ticks: { color: "#52606d" } }, x: { ticks: { display: false } } } }
+  });
+
+  destroyChart("chart_pie");
+  charts.chart_pie = new Chart($("chart_pie"), {
+    type: "pie",
+    data: { labels: Object.keys(bands), datasets: [{ data: Object.values(bands), backgroundColor: [accent, warn, "#5b8def", err], borderWidth: 3, borderColor: "#fff" }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { usePointStyle: true, pointStyle: "circle", padding: 16 } } } }
+  });
+
+  destroyChart("chart_subj");
+  charts.chart_subj = new Chart($("chart_subj"), {
+    type: "bar",
+    data: { labels: subjLabels, datasets: [{ label: "Avg total marks", data: subjAvg, backgroundColor: soft, borderRadius: 5, maxBarThickness: 42 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, grid: { color: "#eef1f5" }, ticks: { color: "#48506d" } }, x: { grid: { display: false }, ticks: { color: "#48506d", maxRotation: 45 } } } }
+  });
+
+  /* ---- Failed Students ---- */
+  const failedStudents = [];
+  students.forEach(s => {
+    const fails = (s.subjects || []).filter(sub => sub.result === "F" || (sub.total !== null && sub.total !== undefined && sub.total < 40));
+    if (fails.length) {
+      failedStudents.push({ usn: s.usn, name: s.name || "", percentage: s.percentage, fails, result_status: s.result_status });
+    }
+  });
+
+  const fp = $("an_failed_panel");
+  const fc = $("an_failed_content");
+  if (!failedStudents.length) {
+    fp.style.display = "none";
+  } else {
+    fp.style.display = "block";
+    let h = "";
+    h += '<div class="failed-summary">';
+    h += '<div class="fs-stat fs-stat-warn"><span class="fs-num">' + failedStudents.length + '</span><span class="fs-label">students with backlogs</span></div>';
+    h += '<div class="fs-stat fs-stat-info"><span class="fs-num">' + students.length + '</span><span class="fs-label">total students</span></div>';
+    h += '<div class="fs-stat fs-stat-accent"><span class="fs-num">' + ((failedStudents.length / students.length * 100).toFixed(1)) + '%</span><span class="fs-label">fail rate</span></div>';
+    h += '</div>';
+    h += '<div class="failed-list">';
+    failedStudents.forEach(st => {
+      const totalFails = st.fails.length;
+      h += '<div class="failed-card">';
+      h += '<div class="fc-head">';
+      h += '<div class="fc-ident"><span class="fc-usn">' + st.usn + '</span><span class="fc-name">' + st.name + '</span></div>';
+      h += '<div class="fc-badges">';
+      h += '<span class="pill fail">' + totalFails + ' backlog' + (totalFails > 1 ? 's' : '') + '</span>';
+      if (st.percentage != null) h += '<span class="pill">' + st.percentage.toFixed(1) + '%</span>';
+      h += '</div>';
+      h += '</div>';
+      h += '<div class="fc-subjects">';
+      st.fails.forEach(f => {
+        const intm = f.internal != null ? f.internal : '—';
+        const extm = f.external != null ? f.external : '—';
+        const totm = f.total != null ? f.total : '—';
+        h += '<div class="fc-sub">';
+        h += '<span class="fc-sub-code">' + f.code + '</span>';
+        h += '<span class="fc-sub-name">' + (f.subject_name || '') + '</span>';
+        h += '<div class="fc-marks">';
+        h += '<span class="fc-m-int">I:' + intm + '</span>';
+        h += '<span class="fc-m-ext">E:' + extm + '</span>';
+        h += '<span class="fc-m-tot">T:' + totm + '</span>';
+        h += '</div>';
+        h += '</div>';
+      });
+      h += '</div>';
+      h += '</div>';
+    });
+    h += '</div>';
+    fc.innerHTML = h;
+  }
+}
+
+function destroyChart(name) {
+  if (charts[name]) { charts[name].destroy(); delete charts[name]; }
+}
+
+/* ---------------- browse rendering ---------------- */
+function fillSelect(id, values) {
+  const sel = $(id);
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">All</option>';
+  values.forEach(v => { const o = document.createElement("option"); o.value = v; o.textContent = v; sel.appendChild(o); });
+  if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  syncAllCustomSelects();
+}
+
+/* Load filter options from the backend API (distinct DB values + presets). */
+async function loadFilterOptions() {
+  const map = {
+    flt_sem: "/api/filters/semesters",
+    flt_scheme: "/api/filters/schemes",
+    flt_year: "/api/filters/years",
+  };
+  for (const [id, url] of Object.entries(map)) {
+    try {
+      const r = await fetch(url);
+      const vals = await r.json();
+      if (Array.isArray(vals)) fillSelect(id, vals);
+    } catch (e) {
+      console.warn("filter options failed", id, e);
+    }
+  }
+}
+
+function populateFilters() {
+  const distinct = attr => [...new Set(batches.map(b => b[attr]).filter(v => v !== null && v !== undefined && v !== ""))].sort();
+  fillSelect("flt_dept", distinct("department"));
+  loadFilterOptions();
+}
+["flt_dept", "flt_sem", "flt_scheme", "flt_year"].forEach(id => $(id).addEventListener("change", () => { browsePage = 1; applyBrowseFilters(); }));
+
+function matchingBatches() {
+  const f = {
+    department: $("flt_dept").value,
+    semester: $("flt_sem").value,
+    scheme: $("flt_scheme").value,
+    year: $("flt_year").value,
+  };
+  return batches.filter(b => Object.entries(f).every(([k, v]) => !v || String(b[k]) === String(v)));
+}
+
+function applyBrowseFilters() {
+  const match = matchingBatches();
+  const need = match.filter(b => !batchStudents[b._id]);
+  need.forEach(b => socket.emit("get-batch-results", { batch_id: b._id }));
+  if (match.length) $("export_btn").disabled = false;
+  else $("export_btn").disabled = true;
+
+  browseRows = [];
+  match.forEach(b => {
+    (batchStudents[b._id] || []).forEach(s => browseRows.push({ batchId: b._id, ...s }));
+  });
+  renderBrowseTable();
+}
+
+$("export_btn").addEventListener("click", () => {
+  const match = matchingBatches();
+  if (!match.length) { toast("Nothing to export"); return; }
+  window.location.href = "/export-batch/" + match[0]._id;
+});
+
+/* VTU grade letter from total marks (mirrors the Excel generator). */
+function gradeOf(total) {
+  const m = Number(total);
+  if (isNaN(m)) return "";
+  if (m >= 90) return "O";
+  if (m >= 80) return "A+";
+  if (m >= 70) return "A";
+  if (m >= 60) return "B+";
+  if (m >= 55) return "B";
+  if (m >= 50) return "C";
+  if (m >= 40) return "P";
+  return "F";
+}
+
+function renderBrowseTable() {
+  const table = $("browse_table");
+  $("browse_count").textContent = browseRows.length + " record(s)";
+
+  const subjectCodes = [...new Set(browseRows.flatMap(r => (r.subjects || []).map(s => s.code)))];
+  const size = pageSize === "all" ? browseRows.length : pageSize;
+  const totalPages = Math.max(1, Math.ceil(browseRows.length / size));
+  if (browsePage > totalPages) browsePage = totalPages;
+  if (browsePage < 1) browsePage = 1;
+  const start = (browsePage - 1) * size;
+  const pageRows = browseRows.slice(start, start + size);
+  $("browse_pager").textContent = browsePage + " / " + totalPages;
+  $("browse_prev").disabled = browsePage <= 1;
+  $("browse_next").disabled = browsePage >= totalPages;
+
+  const COLS_PER_SUBJECT = 5;
+  let html = "<thead><tr><th>USN</th><th>Name</th>";
+  subjectCodes.forEach(c => {
+    html += `<th class='num'>${c} Int</th><th class='num'>${c} Ext</th><th class='num'>${c} Total</th><th class='num'>${c} Grade</th><th class='num'>${c} Res</th>`;
+  });
+  html += "<th class='num'>%</th><th>Status</th></tr></thead><tbody>";
+
+  if (!pageRows.length) {
+    html += "<tr><td colspan='" + (4 + subjectCodes.length * COLS_PER_SUBJECT) + "' style='color:var(--muted);text-align:center;padding:24px;'>No records match the filters.</td></tr>";
+  }
+  pageRows.forEach(r => {
+    const subMap = {};
+    (r.subjects || []).forEach(s => subMap[s.code] = s);
+    html += `<tr><td>${r.usn}</td><td>${r.name || ""}</td>`;
+    subjectCodes.forEach(c => {
+      const s = subMap[c];
+      const int = s && s.internal !== null && s.internal !== undefined ? s.internal : "—";
+      const ext = s && s.external !== null && s.external !== undefined ? s.external : "—";
+      const tot = s && s.total !== null && s.total !== undefined ? s.total : "—";
+      const grd = s && s.total !== null && s.total !== undefined ? gradeOf(s.total) : "—";
+      const res = s && s.result ? s.result : "—";
+      let totBg = "";
+      if (s && s.total !== null && s.total !== undefined) {
+        totBg = "background:#c8e6c9;";
+      }
+      html += `<td class='num'>${int}</td><td class='num'>${ext}</td><td class='num' style='${totBg}font-weight:600'>${tot}</td><td class='num'>${grd}</td><td class='num'>${res}</td>`;
+    });
+    const pct = r.percentage !== null && r.percentage !== undefined ? r.percentage + "%" : "—";
+    html += `<td class='num'>${pct}</td>`;
+    const pass = (r.result_status || "PASS") === "PASS";
+    html += `<td><span class='pill ${pass ? "pass" : "fail"}'>${pass ? "PASS" : "FAIL"}</span></td></tr>`;
+  });
+  html += "</tbody>";
+  table.innerHTML = html;
+}
+
+/* pager buttons */
+$("browse_prev").addEventListener("click", () => { if (browsePage > 1) { browsePage--; renderBrowseTable(); } });
+$("browse_next").addEventListener("click", () => { browsePage++; renderBrowseTable(); });
+$("page_size").addEventListener("change", e => {
+  pageSize = e.target.value === "all" ? "all" : parseInt(e.target.value, 10);
+  browsePage = 1;
+  renderBrowseTable();
+});
+renderList();
+loadFilterOptions();
+
+/* ================================================================
+   STUDENT RECORD VIEW
+   ================================================================ */
+
+function showBrowseView() {
+  $("browseStudentView").style.display = "none";
+  $("browseTableView").style.display = "";
+  $("sr_result_area").innerHTML = "";
+  $("sr_usn_input").value = "";
+}
+
+function showStudentSearch() {
+  $("browseTableView").style.display = "none";
+  $("browseStudentView").style.display = "";
+  $("sr_usn_input").focus();
+}
+
+function doStudentSearch() {
+  const usn = $("sr_usn_input").value.trim().toUpperCase();
+  if (!usn || !/^[A-Z0-9]{10}$/.test(usn)) {
+    $("sr_usn_input").style.borderColor = "#DC2626";
+    setTimeout(() => { if ($("sr_usn_input")) $("sr_usn_input").style.borderColor = "#E5E7EB"; }, 1500);
+    return;
+  }
+  $("sr_print_btn").style.display = "none";
+  const area = $("sr_result_area");
+  area.innerHTML = '<div class="panel" style="text-align:center;padding:40px;"><div class="sr-loading"><div class="sr-spinner"></div><div style="margin-top:12px;color:#6B7280;">Loading record for <strong>' + usn + '</strong>...</div></div></div>';
+
+  fetch("/api/student-record/" + usn)
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { area.innerHTML = '<div class="panel" style="text-align:center;padding:30px;"><div style="font-size:1.5rem;margin-bottom:6px;">&#10060;</div><div style="color:#DC2626;font-weight:600;">' + data.error + '</div></div>'; return; }
+      renderStudentRecord(data);
+      $("sr_print_btn").style.display = "";
+      saveToHistory(data);
+    })
+    .catch(e => { area.innerHTML = '<div class="panel" style="text-align:center;padding:30px;"><div style="color:#DC2626;font-weight:600;">Failed: ' + e.message + '</div></div>'; });
+}
+
+$("sr_toggle_btn").addEventListener("click", showStudentSearch);
+$("sr_back_btn").addEventListener("click", showBrowseView);
+$("sr_open_btn").addEventListener("click", doStudentSearch);
+$("sr_usn_input").addEventListener("keydown", (e) => { if (e.key === "Enter") doStudentSearch(); });
+
+const GRADE_POINTS = { O:10, "A+":9, A:8, "B+":7, B:6, C:5, P:4, F:0 };
+function gradeOf(marks) {
+  if (marks === null || marks === undefined) return "—";
+  const m = Number(marks);
+  if (m >= 90) return "O"; if (m >= 80) return "A+"; if (m >= 70) return "A";
+  if (m >= 60) return "B+"; if (m >= 55) return "B"; if (m >= 50) return "C";
+  if (m >= 40) return "P"; return "F";
+}
+function gradeClass(g) {
+  return {"O":"sr-grade-o","A+":"sr-grade-aplus","A":"sr-grade-a","B+":"sr-grade-bplus","B":"sr-grade-b","C":"sr-grade-c","P":"sr-grade-p","F":"sr-grade-f"}[g]||"";
+}
+function calcSGPA(subjects) {
+  let tc=0,tp=0;
+  subjects.forEach(s=>{if(s.result==="F")return;const g=gradeOf(s.total);const gp=GRADE_POINTS[g];if(gp===undefined)return;tc+=4;tp+=gp*4;});
+  return tc>0?(tp/tc).toFixed(2):"—";
+}
+function semNum(s){try{return parseInt(String(s).replace(/\D/g,""))||0;}catch(e){return 0;}}
+function ordinal(n){return["","1ST","2ND","3RD","4TH","5TH","6TH","7TH","8TH"][n]||n+"TH";}
+
+function renderStudentRecord(data, container) {
+  const body = container || $("sr_result_area");
+  const sems = data.semesters || [];
+  if (!sems.length) {
+    body.innerHTML = '<div class="panel" style="text-align:center;color:var(--muted);padding:30px;">No semester data found for ' + data.usn + '</div>';
+    return;
+  }
+
+  /* Group by semester number: { 1: { original: {...}, revaluation: {...} } } */
+  const semGroups = {};
+  sems.forEach(s => {
+    const num = semNum(s.semester);
+    if (!semGroups[num]) semGroups[num] = {};
+    const rtype = s.result_type || "original";
+    semGroups[num][rtype] = s;
+  });
+
+  const semNums = Object.keys(semGroups).map(Number).sort((a,b) => a - b);
+  const maxSem = Math.max(...semNums, 8);
+
+  /* SGPA calc — use reval if available, else original */
+  const semSGPAs = {};
+  let totalBacklogs = 0;
+  semNums.forEach(num => {
+    const grp = semGroups[num];
+    const s = grp.revaluation || grp.original;
+    const sgpa = calcSGPA(s.subjects || []);
+    semSGPAs[num] = sgpa;
+    totalBacklogs += (s.subjects || []).filter(sub => sub.result === "F").length;
+  });
+
+  const sgpas = Object.values(semSGPAs).filter(v => v !== "—").map(Number);
+  const cgpa = sgpas.length > 0 ? (sgpas.reduce((a,b) => a+b, 0) / sgpas.length).toFixed(2) : "—";
+
+  let html = '';
+
+  /* HEADER CARD */
+  html += `<div class="sr-header">
+    <div class="sr-header-left">
+      <h2>${data.name || data.usn}</h2>
+      <div class="sr-sub">Student Academic Record</div>
+    </div>
+    <div class="sr-header-right">
+      <div class="sr-usn-pill">${data.usn}</div>
+      <div class="sr-sem-count">${semNums.length} semester result(s)</div>
+    </div>
+  </div>`;
+
+  /* SEMESTER SUMMARY */
+  html += '<div class="sr-sem-summary">';
+  for (let i = 1; i <= maxSem; i++) {
+    const val = semSGPAs[i] !== undefined ? semSGPAs[i] : "—";
+    html += `<div class="sr-sem-cell"><div class="sr-sem-label">${ordinal(i)}</div><div class="sr-sem-val">${val}</div></div>`;
+  }
+  html += `<div class="sr-sem-cell sr-cgpa"><div class="sr-sem-label">Mean CGPA</div><div class="sr-sem-val">${cgpa}</div></div>`;
+  html += `<div class="sr-sem-cell sr-backlogs"><div class="sr-sem-label">Backlogs</div><div class="sr-sem-val">${totalBacklogs}</div></div>`;
+  html += '</div>';
+
+  /* SEMESTER CARDS — each semester result shown separately */
+  sems.forEach((s, idx) => {
+    const num = semNum(s.semester);
+    const sgpa = calcSGPA(s.subjects || []);
+    const subs = s.subjects || [];
+    const rtype = s.result_type || "original";
+    const isReval = rtype === "revaluation";
+    const badgeColor = isReval ? "background:#DBEAFE;color:#1E40AF;" : "background:#D1FAE5;color:#065F46;";
+    const badgeText = isReval ? "Revaluation" : "Original";
+
+    /* Check if any subject has reval data (Old Marks / RV Marks fields) */
+    const hasRevalData = subs.some(sub => sub.has_reval || sub.old_marks !== undefined);
+
+    html += `<div class="sr-sem-card" style="${isReval ? 'border:2px solid #93C5FD;' : ''}">
+      <div class="sr-sem-card-head" style="${isReval ? 'background:linear-gradient(135deg,#2563EB,#1E40AF);' : ''}">
+        <span class="sr-sch-label">Semester ${s.semester}</span>
+        <span style="font-size:.72rem;padding:3px 10px;border-radius:6px;font-weight:700;${badgeColor}">${badgeText}</span>
+        <span class="sr-sch-year">${s.scheme || s.year || ""}</span>
+        <span class="sr-sch-sgpa">SGPA ${sgpa}</span>
+      </div>
+      <div style="overflow-x:auto;">
+      <table class="sr-subj-table">
+        <thead><tr>
+          <th>#</th><th>Subject Code</th><th>Subject Name</th>`;
+    if (hasRevalData) {
+      html += `<th style="text-align:center">INT</th><th style="text-align:center">Old Marks</th><th style="text-align:center">Old Res</th>
+               <th style="text-align:center">RV Marks</th><th style="text-align:center">RV Res</th>
+               <th style="text-align:center">Final</th><th style="text-align:center">Final Res</th>`;
+    } else {
+      html += `<th style="text-align:center">INT</th><th style="text-align:center">EXT</th>
+               <th style="text-align:center">TOTAL</th><th style="text-align:center">GRADE</th>
+               <th style="text-align:center">RES</th>`;
+    }
+    html += `</tr></thead><tbody>`;
+    subs.forEach((sub, idx2) => {
+      if (sub.has_reval || sub.old_marks !== undefined) {
+        /* Revaluation row — show Old / RV / Final columns */
+        const oldG = gradeOf(sub.old_marks);
+        const oldR = sub.old_result || "—";
+        const rvG = gradeOf(sub.rv_marks);
+        const rvR = sub.rv_result || "—";
+        const finalG = gradeOf(sub.final_marks);
+        const finalR = sub.final_result || "—";
+        html += `<tr>
+          <td>${idx2 + 1}</td>
+          <td style="font-family:monospace;font-weight:600;">${sub.code}</td>
+          <td>${sub.subject_name || ""}</td>
+          <td class="sr-marks">${sub.internal != null ? sub.internal : "—"}</td>
+          <td class="sr-marks">${sub.old_marks != null ? sub.old_marks : (sub.external != null ? sub.external : "—")}</td>
+          <td style="text-align:center"><span class="${oldR === 'P' ? 'sr-pill-pass' : 'sr-pill-fail'}">${oldR}</span></td>
+          <td class="sr-marks" style="font-weight:700;color:#2563EB;">${sub.rv_marks != null ? sub.rv_marks : "—"}</td>
+          <td style="text-align:center"><span class="${rvR === 'P' ? 'sr-pill-pass' : 'sr-pill-fail'}">${rvR}</span></td>
+          <td class="sr-marks" style="font-weight:800;">${sub.final_marks != null ? sub.final_marks : "—"}</td>
+          <td style="text-align:center"><span class="${finalR === 'P' ? 'sr-pill-pass' : 'sr-pill-fail'}">${finalR}</span></td>
+        </tr>`;
+      } else {
+        /* Normal row — INT / EXT / TOTAL / GRADE / RES */
+        const g = gradeOf(sub.total);
+        const gc = gradeClass(g);
+        const pass = sub.result !== "F";
+        html += `<tr>
+          <td>${idx2 + 1}</td>
+          <td style="font-family:monospace;font-weight:600;">${sub.code}</td>
+          <td>${sub.subject_name || ""}</td>
+          <td class="sr-marks">${sub.internal != null ? sub.internal : "—"}</td>
+          <td class="sr-marks">${sub.external != null ? sub.external : "—"}</td>
+          <td class="sr-marks" style="font-weight:800;">${sub.total != null ? sub.total : "—"}</td>
+          <td style="text-align:center"><span class="sr-grade ${gc}">${g}</span></td>
+          <td style="text-align:center"><span class="${pass ? 'sr-pill-pass' : 'sr-pill-fail'}">${sub.result || "—"}</span></td>
+        </tr>`;
+      }
+    });
+    html += '</tbody></table></div></div>';
+  });
+
+  /* LOCAL HISTORY */
+  const history = getHistory(data.usn);
+  if (history.length > 1) {
+    html += '<div style="margin-top:20px;"><h3 style="font-size:.9rem;color:#374151;margin-bottom:10px;">Result History</h3>';
+    history.forEach((h, i) => {
+      const dt = h.fetched_at ? new Date(h.fetched_at).toLocaleString() : "Unknown";
+      const sgpas_h = h.sgpas || [];
+      const cgpa_h = sgpas_h.length ? (sgpas_h.reduce((a,b)=>a+b,0)/sgpas_h.length).toFixed(2) : "—";
+      html += `<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px 16px;margin-bottom:8px;font-size:.82rem;">
+        <strong>${h.label || "Result " + (i+1)}</strong> — ${dt}
+        <span style="margin-left:12px;color:#6B7280;">Semesters: ${h.sem_count || 0}</span>
+        <span style="margin-left:12px;color:#059669;font-weight:700;">CGPA: ${cgpa_h}</span>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  body.innerHTML = html;
+}
+
+function ordinal(n) {
+  const s = ["","1ST","2ND","3RD","4TH","5TH","6TH","7TH","8TH"];
+  return s[n] || n + "TH";
+}
+
+/* Local Storage History */
+function getHistory(usn) {
+  try {
+    const raw = localStorage.getItem("sr_history_" + usn);
+    return raw ? JSON.parse(raw) : [];
+  } catch(e) { return []; }
+}
+
+function saveToHistory(data) {
+  try {
+    const usn = data.usn;
+    const history = getHistory(usn);
+    const sgpas = (data.semesters || []).map(s => {
+      const v = calcSGPA(s.subjects || []);
+      return v !== "—" ? parseFloat(v) : null;
+    }).filter(v => v !== null);
+
+    const entry = {
+      label: "Fetched Result",
+      fetched_at: new Date().toISOString(),
+      sem_count: (data.semesters || []).length,
+      sgpas: sgpas,
+      data: data,
+    };
+
+    const exists = history.some(h => JSON.stringify(h.data) === JSON.stringify(data));
+    if (!exists) {
+      history.push(entry);
+      if (history.length > 10) history.shift();
+      localStorage.setItem("sr_history_" + usn, JSON.stringify(history));
+    }
+  } catch(e) {}
+}
+
+/* ================================================================
+   REVALUATION TAB
+   ================================================================ */
+let rvComparisonData = [];
+
+function loadRevalBatches() {
+  socket.emit("get-batches");
+}
+
+socket.on("batches", (d) => {
+  if (d.error) return;
+  const sel = $("rv_batch_sel");
+  if (!sel) return;
+  const batches = (d.batches || []).filter(b => (b.result_type || "original") === "original");
+  sel.innerHTML = '<option value="">-- select original batch --</option>' +
+    batches.map(b => {
+      const label = `${b.year} / ${b.scheme} / Sem ${b.semester} / ${b.department} (${b.student_count || 0} students)`;
+      return `<option value="${b._id}">${label}</option>`;
+    }).join("");
+  sel.onchange = () => {
+    $("rv_fetch_btn").disabled = !sel.value;
+  };
+});
+
+$("rv_fetch_btn").addEventListener("click", () => {
+  const batchId = $("rv_batch_sel").value;
+  const url = $("rv_url").value.trim();
+  const raw = $("rv_usns").value;
+  if (!batchId || !url || !raw) { alert("Select batch, enter URL and USNs."); return; }
+
+  const usns = raw.replace(/,/g, "\n").split("\n").map(s => s.trim().toUpperCase()).filter(x => /^[A-Z0-9]{10}$/.test(x));
+  if (!usns.length) { alert("No valid USNs found."); return; }
+
+  $("rv_fetch_btn").disabled = true;
+  $("rv_stop_btn").disabled = false;
+  $("rv_progress_panel").style.display = "";
+  $("rv_summary_strip").style.display = "none";
+  $("rv_highlights_panel").style.display = "none";
+  $("rv_student_cards").style.display = "none";
+  $("rv_empty").style.display = "none";
+  $("rv_progress_fill").style.width = "0%";
+  $("rv_progress_count").textContent = `0 / ${usns.length}`;
+
+  socket.emit("start-reval-fetch", {
+    original_batch_id: batchId,
+    usns: usns,
+    url: url,
+  });
+});
+
+socket.on("reval-fetch-started", (d) => {
+  $("rv_progress_count").textContent = `0 / ${d.total}`;
+});
+
+socket.on("fetch-progress", (d) => {
+  const total = d.total || 1;
+  const pct = Math.round(((d.success + d.fail) / total) * 100);
+  $("rv_progress_fill").style.width = pct + "%";
+  $("rv_progress_count").textContent = `${d.success + d.fail} / ${total}`;
+});
+
+socket.on("fetch-complete", (d) => {
+  $("rv_stop_btn").disabled = true;
+  $("rv_fetch_btn").disabled = false;
+});
+
+socket.on("reval-comparison-ready", (d) => {
+  $("rv_progress_panel").style.display = "none";
+  rvComparisonData = d.comparison || [];
+  renderRevalComparison(d.original_batch_id, d.reval_batch_id);
+});
+
+function renderRevalComparison(origBatchId, revalBatchId) {
+  if (!rvComparisonData.length) {
+    $("rv_empty").style.display = "";
+    $("rv_summary_strip").style.display = "none";
+    $("rv_highlights_panel").style.display = "none";
+    $("rv_student_cards").style.display = "none";
+    return;
+  }
+
+  // Aggregate summary across all students
+  let totalImproved = 0, totalDecreased = 0, totalNoChange = 0;
+  let totalOrig = 0, totalNew = 0;
+  const highlights = [];
+
+  rvComparisonData.forEach(s => {
+    const sm = s.summary;
+    totalImproved += sm.improved || 0;
+    totalDecreased += sm.decreased || 0;
+    totalNoChange += sm.no_change || 0;
+    totalOrig += sm.orig_total || 0;
+    totalNew += sm.new_total || 0;
+
+    (s.comparison || []).forEach(c => {
+      if (c.status === "Improved" || c.result_changed === "New Pass") {
+        highlights.push({
+          usn: s.usn,
+          name: s.name,
+          code: c.code,
+          subject_name: c.subject_name,
+          orig_total: c.orig_total,
+          new_total: c.new_total,
+          change: c.change,
+          orig_result: c.orig_result,
+          new_result: c.new_result,
+          result_changed: c.result_changed,
+        });
+      }
+    });
+  });
+
+  // Show summary cards
+  $("rv_summary_strip").style.display = "";
+  $("rv_orig_total").textContent = totalOrig;
+  $("rv_new_total").textContent = totalNew;
+  const diff = totalNew - totalOrig;
+  $("rv_total_change").textContent = (diff >= 0 ? "+" : "") + diff;
+  $("rv_total_change").style.color = diff > 0 ? "#059669" : diff < 0 ? "#DC2626" : "#6B7280";
+  $("rv_improved_count").textContent = totalImproved;
+  $("rv_nochange_count").textContent = totalNoChange;
+  $("rv_decreased_count").textContent = totalDecreased;
+
+  // Show highlights
+  const hlPanel = $("rv_highlights_panel");
+  const hlDiv = $("rv_highlights");
+  if (highlights.length) {
+    hlPanel.style.display = "";
+    hlDiv.innerHTML = highlights.map(h => {
+      const cls = h.result_changed === "New Pass" ? "rv-hl-improved" : "rv-hl-improved";
+      const changeText = h.change > 0 ? `+${h.change}` : h.change;
+      const resultText = h.result_changed ? ` · ${h.orig_result || "?"} → ${h.new_result || "?"} (${h.result_changed})` : "";
+      return `<div class="rv-highlight-box ${cls}">
+        <strong>${h.usn}</strong> ${h.name ? "(" + h.name + ")" : ""} — ${h.subject_name || h.code}: ${h.orig_total ?? "?"} → ${h.new_total ?? "?"} (${changeText})${resultText}
+      </div>`;
+    }).join("");
+  } else {
+    hlPanel.style.display = "none";
+  }
+
+  // Per-student cards
+  const cardsDiv = $("rv_student_cards");
+  cardsDiv.style.display = "";
+  cardsDiv.innerHTML = rvComparisonData.map(s => {
+    const sm = s.summary;
+    let badgeClass = "rv-badge-nochange";
+    let badgeText = "No Change";
+    if (sm.improved > 0 && sm.total_change > 0) { badgeClass = "rv-badge-improved"; badgeText = `+${sm.total_change} Improved`; }
+    else if (sm.decreased > 0 && sm.total_change < 0) { badgeClass = "rv-badge-decreased"; badgeText = `${sm.total_change} Decreased`; }
+
+    let tableRows = (s.comparison || []).map(c => {
+      const chgCls = c.change > 0 ? "rv-chg-pos" : c.change < 0 ? "rv-chg-neg" : "rv-chg-zero";
+      const chgText = c.change > 0 ? `+${c.change}` : c.change < 0 ? `${c.change}` : "0";
+      const stCls = c.status === "Improved" ? "rv-status-improved" : c.status === "Decreased" ? "rv-status-decreased" : "rv-status-nochange";
+      const npCls = c.result_changed === "New Pass" ? " rv-status-newpass" : "";
+      const origTot = c.orig_total !== null && c.orig_total !== undefined ? c.orig_total : "—";
+      const newTot = c.new_total !== null && c.new_total !== undefined ? c.new_total : "—";
+      return `<tr>
+        <td>${c.code}</td>
+        <td style="font-family:inherit;font-weight:600;">${c.subject_name || ""}</td>
+        <td class="num">${origTot}</td>
+        <td class="num">${newTot}</td>
+        <td class="num ${chgCls}" style="font-weight:700;">${chgText}</td>
+        <td><span class="${stCls}${npCls}">${c.status}${c.result_changed ? " (" + c.result_changed + ")" : ""}</span></td>
+      </tr>`;
+    }).join("");
+
+    return `<div class="rv-student-card">
+      <div class="rv-student-header">
+        <span class="rv-usn">${s.usn}</span>
+        <span class="rv-name">${s.name || ""}</span>
+        <span class="rv-badge ${badgeClass}">${badgeText}</span>
+      </div>
+      <div class="rv-summary-row">
+        <span class="rv-sum-item rv-sum-orig">Original: ${sm.orig_total}</span>
+        <span class="rv-sum-item rv-sum-new">Reval: ${sm.new_total}</span>
+        <span class="rv-sum-item rv-sum-change">Change: ${sm.total_change >= 0 ? "+" : ""}${sm.total_change}</span>
+        <span class="rv-sum-item" style="background:#E0E7FF;color:#3730A3;">Improved: ${sm.improved}</span>
+        <span class="rv-sum-item" style="background:#F3F4F6;color:#374151;">No Change: ${sm.no_change}</span>
+      </div>
+      <div class="tbl-wrap"><table class="rv-table">
+        <thead><tr><th>Code</th><th>Subject</th><th>Before</th><th>After</th><th>Change</th><th>Status</th></tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table></div>
+    </div>`;
+  }).join("");
+}
+
+socket.on("reval-comparison", (d) => {
+  if (d.error) { alert("Error: " + d.error); return; }
+  rvComparisonData = d.comparison || [];
+  renderRevalComparison();
+});
+
+$("rv_stop_btn").addEventListener("click", () => {
+  socket.emit("stop-fetch");
+  $("rv_stop_btn").disabled = true;
+});
+</script>
+</body>
+</html>

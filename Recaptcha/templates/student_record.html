@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student Record - VTU Result Fetcher</title>
+<style>
+:root{--grad:linear-gradient(135deg,#059669,#065F46);--ink:#111827;--ink-soft:#6B7280;--card:#fff;--bg:#f3f4f6;--line:#E5E7EB;--radius:14px;--shadow:0 2px 12px rgba(0,0,0,.06);--shadow-sm:0 1px 4px rgba(0,0,0,.04);--mint:#059669;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;}
+
+.topbar{background:linear-gradient(135deg,#059669 0%,#065F46 100%);padding:20px 32px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.topbar h1{color:#fff;font-size:1.2rem;font-weight:800;flex:1;}
+.topbar a{color:#A7F3D0;text-decoration:none;font-size:.85rem;font-weight:600;}
+.topbar a:hover{color:#fff;}
+
+.search-box{max-width:600px;margin:30px auto;padding:0 20px;}
+.search-row{display:flex;gap:10px;}
+.search-row input{flex:1;padding:14px 18px;border:2px solid var(--line);border-radius:12px;font-size:1rem;font-weight:600;letter-spacing:.04em;outline:none;transition:border-color .2s;}
+.search-row input:focus{border-color:var(--mint);}
+.search-row button{padding:14px 28px;background:var(--grad);color:#fff;border:none;border-radius:12px;font-size:.95rem;font-weight:700;cursor:pointer;white-space:nowrap;transition:opacity .2s;}
+.search-row button:hover{opacity:.9;}
+.search-hint{text-align:center;color:var(--ink-soft);font-size:.82rem;margin-top:10px;}
+
+.container{max-width:1100px;margin:0 auto;padding:20px 24px 40px;}
+
+.loading{text-align:center;padding:60px 20px;color:var(--ink-soft);}
+.spinner{display:inline-block;width:36px;height:36px;border:3px solid var(--line);border-top-color:var(--mint);border-radius:50%;animation:spin .7s linear infinite;margin-bottom:12px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+.error-msg{text-align:center;padding:40px;color:#DC2626;font-weight:600;}
+
+/* header card */
+.sr-header{background:linear-gradient(135deg,#059669 0%,#065F46 100%);border-radius:var(--radius);padding:28px 32px;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:20px;box-shadow:0 4px 20px rgba(5,150,105,.25);}
+.sr-header-left h2{font-size:1.5rem;font-weight:800;letter-spacing:.02em;margin:0;text-transform:uppercase;}
+.sr-header-left .sr-sub{font-size:.85rem;opacity:.8;margin-top:4px;}
+.sr-header-right{text-align:right;}
+.sr-usn-pill{display:inline-block;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.35);border-radius:20px;padding:6px 18px;font-size:1rem;font-weight:700;letter-spacing:.06em;}
+.sr-sem-count{font-size:.82rem;opacity:.8;margin-top:6px;}
+
+/* semester summary */
+.sr-sem-summary{display:flex;gap:0;border-radius:12px;overflow:hidden;margin-bottom:20px;box-shadow:var(--shadow-sm);border:1px solid var(--line);flex-wrap:wrap;}
+.sr-sem-cell{flex:1;min-width:80px;text-align:center;padding:12px 8px;border-right:1px solid var(--line);background:#fff;}
+.sr-sem-cell:last-child{border-right:none;}
+.sr-sem-cell .sr-sem-label{font-size:.65rem;font-weight:700;text-transform:uppercase;color:var(--ink-soft);letter-spacing:.06em;}
+.sr-sem-cell .sr-sem-val{font-size:1.1rem;font-weight:800;color:var(--ink);margin-top:4px;}
+.sr-sem-cell.sr-cgpa{background:linear-gradient(135deg,#059669,#065F46);color:#fff;}
+.sr-sem-cell.sr-cgpa .sr-sem-label{color:#A7F3D0;}
+.sr-sem-cell.sr-cgpa .sr-sem-val{color:#fff;}
+.sr-sem-cell.sr-backlogs{background:#FEF3C7;}
+.sr-sem-cell.sr-backlogs .sr-sem-val{color:#92400E;}
+
+/* semester card */
+.sr-sem-card{background:#fff;border-radius:var(--radius);border:1px solid var(--line);margin-bottom:18px;overflow:hidden;box-shadow:var(--shadow-sm);}
+.sr-sem-card-head{background:linear-gradient(135deg,#1C7A5E 0%,#123D2E 100%);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.sr-sem-card-head .sr-sch-label{font-weight:800;font-size:.95rem;}
+.sr-sem-card-head .sr-sch-year{font-size:.82rem;opacity:.8;}
+.sr-sem-card-head .sr-sch-sgpa{margin-left:auto;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.3);border-radius:8px;padding:4px 12px;font-weight:700;font-size:.85rem;}
+
+/* subject table */
+.tbl-wrap{overflow-x:auto;}
+.sr-subj-table{width:100%;border-collapse:collapse;font-size:.82rem;}
+.sr-subj-table th{background:#F9FAFB;color:#374151;padding:10px 12px;text-align:left;font-weight:700;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid var(--line);white-space:nowrap;}
+.sr-subj-table td{padding:9px 12px;border-bottom:1px solid #F3F4F6;}
+.sr-subj-table tr:last-child td{border-bottom:none;}
+.sr-subj-table tr:hover{background:#F9FAFB;}
+.sr-marks{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-weight:600;text-align:center;}
+.sr-grade{display:inline-block;padding:2px 8px;border-radius:4px;font-weight:700;font-size:.75rem;}
+.sr-grade-o{background:#D1FAE5;color:#065F46;}
+.sr-grade-aplus,.sr-grade-a{background:#DBEAFE;color:#1E40AF;}
+.sr-grade-bplus,.sr-grade-b{background:#E0E7FF;color:#3730A3;}
+.sr-grade-c{background:#FEF3C7;color:#92400E;}
+.sr-grade-p{background:#F3F4F6;color:#374151;}
+.sr-grade-f{background:#FEE2E2;color:#991B1B;}
+.sr-pill-pass{background:#D1FAE5;color:#065F46;padding:2px 8px;border-radius:4px;font-weight:700;font-size:.75rem;}
+.sr-pill-fail{background:#FEE2E2;color:#991B1B;padding:2px 8px;border-radius:4px;font-weight:700;font-size:.75rem;}
+
+.history-box{margin-top:20px;background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:16px 20px;}
+.history-box h3{font-size:.9rem;color:var(--ink);margin-bottom:10px;}
+.history-entry{padding:10px 14px;border-radius:10px;margin-bottom:8px;font-size:.82rem;background:#F9FAFB;border:1px solid var(--line);}
+
+@media(max-width:700px){
+  .sr-header{padding:20px;flex-direction:column;text-align:center;}
+  .sr-header-right{text-align:center;}
+  .sr-sem-summary{flex-direction:column;}
+  .sr-sem-cell{border-right:none;border-bottom:1px solid var(--line);}
+  .container{padding:12px;}
+  .sr-subj-table{display:block;overflow-x:auto;}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:8px;padding:6px 14px;color:#fff;text-decoration:none;font-size:.82rem;font-weight:600;">Back</a>
+  <h1>Student Academic Record</h1>
+  <a href="/" target="_blank">Open Dashboard</a>
+</div>
+
+<div class="search-box">
+  <div class="search-row">
+    <input id="usn_input" type="text" placeholder="Enter USN (e.g. 1GD23CS001)" maxlength="10" autofocus>
+    <button id="search_btn">Search</button>
+  </div>
+  <div class="search-hint">Enter a valid 10-character VTU USN and click Search</div>
+</div>
+
+<div class="container" id="result_area"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+
+const GRADE_POINTS={O:10,"A+":9,A:8,"B+":7,B:6,C:5,P:4,F:0};
+function gradeOf(m){if(m===null||m===undefined)return"—";const n=Number(m);if(n>=90)return"O";if(n>=80)return"A+";if(n>=70)return"A";if(n>=60)return"B+";if(n>=55)return"B";if(n>=50)return"C";if(n>=40)return"P";return"F";}
+function gradeClass(g){return{O:"sr-grade-o","A+":"sr-grade-aplus",A:"sr-grade-a","B+":"sr-grade-bplus",B:"sr-grade-b",C:"sr-grade-c",P:"sr-grade-p",F:"sr-grade-f"}[g]||"";}
+function ordinal(n){return["","1ST","2ND","3RD","4TH","5TH","6TH","7TH","8TH"][n]||n+"TH";}
+
+function calcSGPA(subjects){
+  let tc=0,tp=0;
+  subjects.forEach(s=>{if(s.result==="F")return;const g=gradeOf(s.total);const gp=GRADE_POINTS[g];if(gp===undefined)return;tc+=4;tp+=gp*4;});
+  return tc>0?(tp/tc).toFixed(2):"—";
+}
+
+function search(){
+  const usn=$("usn_input").value.trim().toUpperCase();
+  if(!usn||!/^[A-Z0-9]{10}$/.test(usn)){
+    alert("Enter a valid 10-character USN");return;
+  }
+  const area=$("result_area");
+  area.innerHTML='<div class="loading"><div class="spinner"></div><div>Searching for '+usn+'...</div></div>';
+
+  fetch("/api/student-record/"+usn)
+    .then(r=>{if(!r.ok)throw new Error("Not found");return r.json();})
+    .then(data=>{if(data.error)throw new Error(data.error);render(data);saveToHistory(data);})
+    .catch(e=>{area.innerHTML='<div class="error-msg">Student not found: '+usn+'</div>';});
+}
+
+function semNum(s){try{return parseInt(String(s).replace(/\D/g,""))||0;}catch(e){return 0;}}
+
+$("search_btn").addEventListener("click",search);
+$("usn_input").addEventListener("keydown",e=>{if(e.key==="Enter")search();});
+
+function render(data){
+  const area=$("result_area");
+  const sems=data.semesters||[];
+  if(!sems.length){area.innerHTML='<div class="error-msg">No data found for '+data.usn+'</div>';return;}
+
+  const maxSem=Math.max(...sems.map(s=>semNum(s.semester)),8);
+  const semSGPAs={};let totalBacklogs=0;
+  sems.forEach(s=>{
+    const num=semNum(s.semester);
+    const sgpa=calcSGPA(s.subjects||[]);
+    semSGPAs[num]=sgpa;
+    totalBacklogs+=(s.subjects||[]).filter(sub=>sub.result==="F").length;
+  });
+  const sgpas=Object.values(semSGPAs).filter(v=>v!=="—").map(Number);
+  const cgpa=sgpas.length?(sgpas.reduce((a,b)=>a+b,0)/sgpas.length).toFixed(2):"—";
+
+  let h='';
+
+  // header
+  h+=`<div class="sr-header">
+    <div class="sr-header-left"><h2>${data.name||data.usn}</h2><div class="sr-sub">Student Academic Record</div></div>
+    <div class="sr-header-right"><div class="sr-usn-pill">${data.usn}</div><div class="sr-sem-count">${sems.length} semester result(s)</div></div>
+  </div>`;
+
+  // summary strip
+  h+='<div class="sr-sem-summary">';
+  for(let i=1;i<=maxSem;i++){
+    const val=semSGPAs[i]!==undefined?semSGPAs[i]:"—";
+    h+=`<div class="sr-sem-cell"><div class="sr-sem-label">${ordinal(i)}</div><div class="sr-sem-val">${val}</div></div>`;
+  }
+  h+=`<div class="sr-sem-cell sr-cgpa"><div class="sr-sem-label">Mean CGPA</div><div class="sr-sem-val">${cgpa}</div></div>`;
+  h+=`<div class="sr-sem-cell sr-backlogs"><div class="sr-sem-label">Backlogs</div><div class="sr-sem-val">${totalBacklogs}</div></div>`;
+  h+='</div>';
+
+  // semester cards
+  sems.forEach(s=>{
+    const num=semNum(s.semester);
+    const sgpa=semSGPAs[num]||"—";
+    const subs=s.subjects||[];
+    h+=`<div class="sr-sem-card">
+      <div class="sr-sem-card-head">
+        <span class="sr-sch-label">Semester ${s.semester}</span>
+        <span class="sr-sch-year">${s.scheme||s.year||""}</span>
+        <span class="sr-sch-sgpa">SGPA ${sgpa}</span>
+      </div>
+      <div class="tbl-wrap"><table class="sr-subj-table">
+        <thead><tr><th>#</th><th>Subject Code</th><th>Subject Name</th><th style="text-align:center">INT</th><th style="text-align:center">EXT</th><th style="text-align:center">TOTAL</th><th style="text-align:center">GRADE</th><th style="text-align:center">RES</th></tr></thead>
+        <tbody>`;
+    subs.forEach((sub,i)=>{
+      const g=gradeOf(sub.total);const gc=gradeClass(g);const pass=sub.result!=="F";
+      h+=`<tr>
+        <td>${i+1}</td>
+        <td style="font-family:monospace;font-weight:600;">${sub.code}</td>
+        <td>${sub.subject_name||""}</td>
+        <td class="sr-marks">${sub.internal!=null?sub.internal:"—"}</td>
+        <td class="sr-marks">${sub.external!=null?sub.external:"—"}</td>
+        <td class="sr-marks" style="font-weight:800;">${sub.total!=null?sub.total:"—"}</td>
+        <td style="text-align:center"><span class="sr-grade ${gc}">${g}</span></td>
+        <td style="text-align:center"><span class="${pass?'sr-pill-pass':'sr-pill-fail'}">${sub.result||"—"}</span></td>
+      </tr>`;
+    });
+    h+='</tbody></table></div></div>';
+  });
+
+  // history
+  const hist=getHistory(data.usn);
+  if(hist.length>1){
+    h+='<div class="history-box"><h3>Result History</h3>';
+    hist.forEach((entry,i)=>{
+      const dt=entry.fetched_at?new Date(entry.fetched_at).toLocaleString():"Unknown";
+      const sgpa_list=entry.sgpas||[];
+      const c=sgpa_list.length?(sgpa_list.reduce((a,b)=>a+b,0)/sgpa_list.length).toFixed(2):"—";
+      h+=`<div class="history-entry"><strong>${entry.label||"Result "+(i+1)}</strong> — ${dt} <span style="margin-left:12px;color:#059669;font-weight:700;">CGPA: ${c}</span></div>`;
+    });
+    h+='</div>';
+  }
+
+  area.innerHTML=h;
+}
+
+function getHistory(usn){try{return JSON.parse(localStorage.getItem("sr_history_"+usn)||"[]");}catch(e){return[];}}
+function saveToHistory(data){
+  try{
+    const hist=getHistory(data.usn);
+    const sgpas=(data.semesters||[]).map(s=>{const v=calcSGPA(s.subjects||[]);return v!=="—"?parseFloat(v):null;}).filter(v=>v!==null);
+    const entry={label:"Fetched Result",fetched_at:new Date().toISOString(),sem_count:(data.semesters||[]).length,sgpas,data};
+    if(!hist.some(e=>JSON.stringify(e.data)===JSON.stringify(data))){hist.push(entry);if(hist.length>10)hist.shift();localStorage.setItem("sr_history_"+data.usn,JSON.stringify(hist));}
+  }catch(e){}
+}
+</script>
+</body>
+</html>
