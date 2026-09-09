@@ -1,14 +1,15 @@
-"""MongoDB persistence layer for the VTU result fetcher.
+"""Supabase (PostgreSQL) persistence layer for the VTU result fetcher.
 
-Reads MONGODB_URI / MONGODB_DB_NAME from the .env file (python-dotenv).
-If MongoDB is not configured or unreachable, every function degrades
+Reads SUPABASE_URL and SUPABASE_KEY from the .env file (python-dotenv).
+If Supabase is not configured or unreachable, every function degrades
 gracefully (returns empty results / error messages) — the app keeps working.
 """
 
 import os
+import json
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 try:
     from dotenv import load_dotenv
@@ -17,306 +18,278 @@ try:
 except Exception:
     pass
 
-from pymongo import MongoClient
-from pymongo.errors import PyMongoError
-from bson import ObjectId
+from supabase import create_client, Client
 
-MONGODB_URI = os.getenv("MONGODB_URI", "")
-MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "vtu_results")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
 client = None
-db = None
 status = "disabled"
-status_msg = "MongoDB not configured (set MONGODB_URI in .env)"
+status_msg = "Supabase not configured (set SUPABASE_URL and SUPABASE_KEY in .env)"
 
-# Markers that mean the user hasn't filled in the real connection string yet
-_PLACEHOLDER_MARKERS = ("PASTE_ROTATED_PASSWORD_HERE", "<db_password>", "<password>", "<username>", "<user>")
+_PLACEHOLDER_MARKERS = ("PASTE", "<", "your-", "xxx")
+
+GRADE_POINTS = {"O": 10, "A+": 9, "A": 8, "B+": 7, "B": 6, "C": 5, "P": 4, "F": 0}
+
+
+SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS fetch_batches (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    year TEXT,
+    scheme TEXT,
+    semester TEXT,
+    department TEXT,
+    subjects JSONB DEFAULT '[]',
+    credits JSONB DEFAULT '{}',
+    student_count INTEGER DEFAULT 0,
+    usn_prefix TEXT,
+    run_id TEXT,
+    saved_at TIMESTAMPTZ DEFAULT now(),
+    credits_updated_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS student_results (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    batch_id TEXT REFERENCES fetch_batches(id) ON DELETE CASCADE,
+    usn TEXT,
+    name TEXT,
+    subjects JSONB DEFAULT '[]',
+    percentage REAL,
+    sgpa REAL,
+    result_status TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_students_batch ON student_results(batch_id);
+CREATE INDEX IF NOT EXISTS idx_students_usn ON student_results(usn);
+"""
 
 
 def init_db():
-    """Try to connect to MongoDB. Never raises — logs status via return value."""
-    global client, db, status, status_msg
+    global client, status, status_msg
 
-    if not MONGODB_URI or any(m in MONGODB_URI for m in _PLACEHOLDER_MARKERS):
+    if not SUPABASE_URL or any(m in SUPABASE_URL for m in _PLACEHOLDER_MARKERS):
         status = "disabled"
-        status_msg = "MongoDB not configured — paste your real MONGODB_URI into .env"
+        status_msg = "Supabase not configured — paste your SUPABASE_URL and SUPABASE_KEY into .env"
         return False
 
     try:
-        client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
-        client.admin.command("ping")
-        db = client[MONGODB_DB_NAME]
+        client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        # Test connection by querying batches table
+        client.table("fetch_batches").select("id").limit(1).execute()
         status = "connected"
-        status_msg = f"Connected to MongoDB: {MONGODB_DB_NAME}"
-        global _keepalive_running
-        if not _keepalive_running:
-            _keepalive_running = True
-            t = threading.Thread(target=_keepalive_ping, daemon=True)
-            t.start()
+        status_msg = f"Connected to Supabase"
         return True
-    except PyMongoError as e:
+    except Exception as e:
         client = None
-        db = None
         status = "error"
-        msg = str(e)
-        if "tls" in msg.lower() or "ssl" in msg.lower():
-            status_msg = (
-                "MongoDB TLS handshake failed. This usually means your Atlas cluster is "
-                "PAUSED or the network blocks port 27017. Open Atlas console, make sure "
-                "the cluster shows 'Active', and try again."
-            )
-        else:
-            status_msg = f"MongoDB unreachable: {msg[:200]}"
+        status_msg = f"Supabase error: {str(e)[:200]}"
         return False
-
-
-_keepalive_running = False
-
-def _keepalive_ping():
-    """Ping MongoDB every 5 minutes to prevent Atlas free tier from pausing."""
-    global client, db, status, status_msg
-    while True:
-        time.sleep(300)
-        if status == "connected" and client:
-            try:
-                client.admin.command("ping")
-            except Exception:
-                try:
-                    client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=8000)
-                    client.admin.command("ping")
-                    db = client[MONGODB_DB_NAME]
-                    status = "connected"
-                    status_msg = f"Connected to MongoDB: {MONGODB_DB_NAME}"
-                except Exception:
-                    status = "error"
-                    status_msg = "MongoDB connection lost"
-        else:
-            try:
-                client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=8000)
-                client.admin.command("ping")
-                db = client[MONGODB_DB_NAME]
-                status = "connected"
-                status_msg = f"Connected to MongoDB: {MONGODB_DB_NAME}"
-            except Exception:
-                pass
 
 
 def is_connected():
-    if status == "connected" and client is not None and db is not None:
-        return True
-    _auto_reconnect()
-    return status == "connected" and client is not None and db is not None
+    return status == "connected" and client is not None
 
 
-def _auto_reconnect():
-    """Try to reconnect if disconnected."""
-    global client, db, status, status_msg
-    if status == "connected":
-        return
-    try:
-        client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=8000)
-        client.admin.command("ping")
-        db = client[MONGODB_DB_NAME]
-        status = "connected"
-        status_msg = f"Connected to MongoDB: {MONGODB_DB_NAME}"
-    except Exception:
-        pass
+def _now():
+    return datetime.now(timezone.utc).isoformat()
 
 
-def _batches_coll():
-    return db["fetch_batches"] if db is not None else None
-
-
-def _students_coll():
-    return db["student_results"] if db is not None else None
-
-
-def _jsonable(doc):
-    """Convert a Mongo doc into a JSON-safe dict (ObjectId/date -> str)."""
+def _to_row(doc):
+    """Strip internal fields before insert."""
     out = dict(doc)
-    if "_id" in out:
-        out["_id"] = str(out["_id"])
-    if isinstance(out.get("saved_at"), datetime):
-        out["saved_at"] = out["saved_at"].isoformat()
-    if "batch_id" in out:
-        out["batch_id"] = str(out["batch_id"])
+    out.pop("_id", None)
+    out.pop("id", None)
     return out
 
 
-def insert_batch(batch_doc, student_docs):
-    """Insert one fetch_batches doc + N student_results docs (same batch_id).
-    Returns (batch_id_str, inserted_student_count) or (None, error_msg)."""
-    if not is_connected():
-        return None, "MongoDB not connected"
-    try:
-        batch_id = _batches_coll().insert_one(batch_doc).inserted_id
-        for s in student_docs:
-            s["batch_id"] = batch_id
-        if student_docs:
-            _students_coll().insert_many(student_docs)
-        return str(batch_id), len(student_docs)
-    except PyMongoError as e:
-        return None, str(e)
-
+# ── BATCHES ──────────────────────────────────────────────────────────────────
 
 def save_batch(batch_doc, student_docs):
-    """Insert a new batch, or MERGE into an existing batch with the same
-    (year, scheme, semester, department, result_type) — never creates a
-    duplicate record. Only USNs not already present in that batch are appended.
-    Returns (batch_id_str, added_count, was_merged, total_students)
-    or (None, error_msg, False, 0)."""
     if not is_connected():
-        return None, "MongoDB not connected", False, 0
+        return None, "Supabase not connected", False, 0
     try:
-        rtype = batch_doc.get("result_type", "original")
-        existing = _batches_coll().find_one({
-            "year": batch_doc["year"],
-            "scheme": batch_doc["scheme"],
-            "semester": batch_doc["semester"],
-            "department": batch_doc["department"],
-            "result_type": rtype,
-        })
+        # Check for existing batch with same key
+        existing = client.table("fetch_batches").select("*").eq("year", batch_doc["year"]).eq("scheme", batch_doc["scheme"]).eq("semester", batch_doc["semester"]).eq("department", batch_doc["department"]).execute()
+        rows = existing.data or []
 
-        if existing is None:
-            batch_id = _batches_coll().insert_one(batch_doc).inserted_id
+        if not rows:
+            # New batch
+            insert_doc = _to_row(batch_doc)
+            insert_doc["saved_at"] = _now()
+            result = client.table("fetch_batches").insert(insert_doc).execute()
+            batch_id = result.data[0]["id"]
             for s in student_docs:
                 s["batch_id"] = batch_id
             if student_docs:
-                _students_coll().insert_many(student_docs)
-            return str(batch_id), len(student_docs), False, len(student_docs)
+                s_rows = [_to_row(s) for s in student_docs]
+                # Insert in chunks of 500
+                for i in range(0, len(s_rows), 500):
+                    client.table("student_results").insert(s_rows[i:i+500]).execute()
+            return batch_id, len(student_docs), False, len(student_docs)
 
-        # ---- merge path: same batch already exists ----
-        oid = existing["_id"]
-        existing_usns = set(
-            s["usn"] for s in _students_coll().find({"batch_id": oid}, {"usn": 1})
-        )
+        # Merge path
+        batch_id = rows[0]["id"]
+        existing_res = client.table("student_results").select("usn").eq("batch_id", batch_id).execute()
+        existing_usns = set(r["usn"] for r in (existing_res.data or []))
         new_docs = [d for d in student_docs if d["usn"] not in existing_usns]
         new_docs.sort(key=lambda d: d.get("usn", ""))
-        for s in new_docs:
-            s["batch_id"] = oid
         if new_docs:
-            _students_coll().insert_many(new_docs)
+            s_rows = [{"batch_id": batch_id, **_to_row(s)} for s in new_docs]
+            for i in range(0, len(s_rows), 500):
+                client.table("student_results").insert(s_rows[i:i+500]).execute()
 
-        total = _students_coll().count_documents({"batch_id": oid})
+        total_res = client.table("student_results").select("id", count="exact").eq("batch_id", batch_id).execute()
+        total = total_res.count or len(new_docs)
         merged_subjects = sorted(
-            set(existing.get("subjects") or []) | set(batch_doc.get("subjects") or [])
+            set(rows[0].get("subjects") or []) | set(batch_doc.get("subjects") or [])
         )
-        _batches_coll().update_one(
-            {"_id": oid},
-            {"$set": {
-                "student_count": total,
-                "subjects": merged_subjects,
-                "saved_at": datetime.utcnow(),
-            }},
-        )
-        return str(oid), len(new_docs), True, total
-    except PyMongoError as e:
+        client.table("fetch_batches").update({
+            "student_count": total,
+            "subjects": json.dumps(merged_subjects),
+            "saved_at": _now(),
+        }).eq("id", batch_id).execute()
+        return batch_id, len(new_docs), True, total
+
+    except Exception as e:
         return None, str(e), False, 0
 
 
 def merge_into_batch(batch_id, batch_doc, student_docs):
-    """Merge students into ONE specific existing batch chosen by the user.
-
-    Like save_batch's merge path, but the target batch is picked explicitly
-    (by _id) instead of auto-matched on (year, scheme, semester, department).
-    Only USNs not already present in that batch are appended.
-    Returns (batch_id_str, added_count, was_merged, total_students)
-    or (None, error_msg, False, 0)."""
     if not is_connected():
-        return None, "MongoDB not connected", False, 0
+        return None, "Supabase not connected", False, 0
     try:
-        oid = ObjectId(batch_id)
-        existing = _batches_coll().find_one({"_id": oid})
-        if existing is None:
+        existing = client.table("fetch_batches").select("*").eq("id", batch_id).execute()
+        rows = existing.data or []
+        if not rows:
             return None, "Batch not found", False, 0
 
-        existing_usns = set(
-            s["usn"] for s in _students_coll().find({"batch_id": oid}, {"usn": 1})
-        )
+        existing_res = client.table("student_results").select("usn").eq("batch_id", batch_id).execute()
+        existing_usns = set(r["usn"] for r in (existing_res.data or []))
         new_docs = [d for d in student_docs if d["usn"] not in existing_usns]
         new_docs.sort(key=lambda d: d.get("usn", ""))
-        for s in new_docs:
-            s["batch_id"] = oid
         if new_docs:
-            _students_coll().insert_many(new_docs)
+            s_rows = [{"batch_id": batch_id, **_to_row(s)} for s in new_docs]
+            for i in range(0, len(s_rows), 500):
+                client.table("student_results").insert(s_rows[i:i+500]).execute()
 
-        total = _students_coll().count_documents({"batch_id": oid})
+        total_res = client.table("student_results").select("id", count="exact").eq("batch_id", batch_id).execute()
+        total = total_res.count or len(new_docs)
         merged_subjects = sorted(
-            set(existing.get("subjects") or []) | set(batch_doc.get("subjects") or [])
+            set(rows[0].get("subjects") or []) | set(batch_doc.get("subjects") or [])
         )
-        _batches_coll().update_one(
-            {"_id": oid},
-            {"$set": {
-                "student_count": total,
-                "subjects": merged_subjects,
-                "saved_at": datetime.utcnow(),
-            }},
-        )
-        return str(oid), len(new_docs), True, total
-    except PyMongoError as e:
+        client.table("fetch_batches").update({
+            "student_count": total,
+            "subjects": json.dumps(merged_subjects),
+            "saved_at": _now(),
+        }).eq("id", batch_id).execute()
+        return batch_id, len(new_docs), True, total
+
+    except Exception as e:
         return None, str(e), False, 0
 
 
 def fetch_batches(limit=100):
-    """Return saved batches, newest first."""
     if not is_connected():
         return []
     try:
-        docs = list(_batches_coll().find().sort("saved_at", -1).limit(limit))
-        return [_jsonable(d) for d in docs]
-    except PyMongoError as e:
-        print(f"[MongoDB] fetch_batches error: {e}")
+        result = client.table("fetch_batches").select("*").order("saved_at", desc=True).limit(limit).execute()
+        rows = result.data or []
+        for r in rows:
+            if isinstance(r.get("subjects"), str):
+                try:
+                    r["subjects"] = json.loads(r["subjects"])
+                except Exception:
+                    r["subjects"] = []
+            if isinstance(r.get("credits"), str):
+                try:
+                    r["credits"] = json.loads(r["credits"])
+                except Exception:
+                    r["credits"] = {}
+        return rows
+    except Exception as e:
+        print(f"[Supabase] fetch_batches error: {e}")
         return []
 
 
 def distinct_batch_values(field):
-    """Return unique, non-empty values of a batch field (semester/scheme/year/...).
-    Used to populate filter dropdowns directly from the database."""
     if not is_connected():
         return []
     try:
-        values = _batches_coll().distinct(field)
-        return [str(v) for v in values if v is not None and str(v).strip() != ""]
-    except PyMongoError as e:
-        print(f"[MongoDB] distinct_batch_values error: {e}")
+        result = client.table("fetch_batches").select(field).execute()
+        values = set()
+        for r in (result.data or []):
+            v = r.get(field)
+            if v is not None and str(v).strip():
+                values.add(str(v))
+        return sorted(values)
+    except Exception as e:
+        print(f"[Supabase] distinct_batch_values error: {e}")
         return []
 
 
 def fetch_batch(batch_id):
-    """Return one batch doc (JSON-safe) or None."""
-    if not is_connected() or not ObjectId.is_valid(batch_id):
+    if not is_connected():
         return None
     try:
-        doc = _batches_coll().find_one({"_id": ObjectId(batch_id)})
-        return _jsonable(doc) if doc else None
-    except PyMongoError as e:
-        print(f"[MongoDB] fetch_batch error: {e}")
+        result = client.table("fetch_batches").select("*").eq("id", batch_id).execute()
+        rows = result.data or []
+        if not rows:
+            return None
+        r = rows[0]
+        if isinstance(r.get("subjects"), str):
+            try:
+                r["subjects"] = json.loads(r["subjects"])
+            except Exception:
+                r["subjects"] = []
+        if isinstance(r.get("credits"), str):
+            try:
+                r["credits"] = json.loads(r["credits"])
+            except Exception:
+                r["credits"] = {}
+        return r
+    except Exception as e:
+        print(f"[Supabase] fetch_batch error: {e}")
         return None
 
+
+def delete_batch(batch_id):
+    if not is_connected():
+        return False, "Supabase not connected"
+    try:
+        client.table("student_results").delete().eq("batch_id", batch_id).execute()
+        result = client.table("fetch_batches").delete().eq("id", batch_id).execute()
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+# ── STUDENTS ─────────────────────────────────────────────────────────────────
 
 def fetch_students(batch_id):
-    """Return student docs for one batch (JSON-safe) or []."""
-    if not is_connected() or not ObjectId.is_valid(batch_id):
+    if not is_connected():
         return []
     try:
-        docs = list(_students_coll().find({"batch_id": ObjectId(batch_id)}).sort("usn", 1))
-        return [_jsonable(d) for d in docs]
-    except PyMongoError as e:
-        print(f"[MongoDB] fetch_students error: {e}")
+        result = client.table("student_results").select("*").eq("batch_id", batch_id).order("usn").execute()
+        rows = result.data or []
+        for r in rows:
+            if isinstance(r.get("subjects"), str):
+                try:
+                    r["subjects"] = json.loads(r["subjects"])
+                except Exception:
+                    r["subjects"] = []
+        return rows
+    except Exception as e:
+        print(f"[Supabase] fetch_students error: {e}")
         return []
 
 
 def fetch_student_record(usn):
-    """Fetch all semester results for a USN across all batches.
-
-    Returns {usn, name, semesters: [{batch_id, semester, scheme, year, department,
-    subjects, percentage, result_status, saved_at}]} sorted by semester number.
-    """
     if not is_connected():
         return None
     try:
         usn = usn.strip().upper()
-        students = list(_students_coll().find({"usn": usn}).sort("usn", 1))
+        students_res = client.table("student_results").select("*").eq("usn", usn).execute()
+        students = students_res.data or []
         if not students:
             return None
 
@@ -324,28 +297,37 @@ def fetch_student_record(usn):
         semesters = []
         seen_sem = set()
         for s in students:
-            batch = _batches_coll().find_one({"_id": s["batch_id"]})
+            batch_id = s.get("batch_id", "")
+            batch = fetch_batch(batch_id)
             if not batch:
                 continue
-            rtype = batch.get("result_type", "original")
             sem = batch.get("semester", "?")
-            key = f"{sem}_{rtype}"
-            if key in seen_sem:
+            if sem in seen_sem:
                 continue
-            seen_sem.add(key)
+            seen_sem.add(sem)
             if not name:
                 name = s.get("name", "")
+            subjects = s.get("subjects", []) or []
+            if isinstance(subjects, str):
+                subjects = json.loads(subjects)
+            credits_map = batch.get("credits", {}) or {}
+            if isinstance(credits_map, str):
+                credits_map = json.loads(credits_map)
+            if credits_map:
+                for subj in subjects:
+                    cr = credits_map.get(subj.get("code", ""))
+                    if cr is not None:
+                        subj["credit"] = float(cr)
             semesters.append({
-                "batch_id": str(s["batch_id"]),
+                "batch_id": batch_id,
                 "semester": sem,
                 "scheme": batch.get("scheme", ""),
                 "year": batch.get("year", ""),
                 "department": batch.get("department", ""),
-                "subjects": s.get("subjects", []),
+                "subjects": subjects,
                 "percentage": s.get("percentage"),
                 "result_status": s.get("result_status", ""),
                 "saved_at": batch.get("saved_at", ""),
-                "result_type": rtype,
             })
 
         def sem_sort_key(x):
@@ -356,181 +338,189 @@ def fetch_student_record(usn):
         semesters.sort(key=sem_sort_key)
 
         return {"usn": usn, "name": name, "semesters": semesters}
-    except PyMongoError as e:
-        print(f"[MongoDB] fetch_student_record error: {e}")
+    except Exception as e:
+        print(f"[Supabase] fetch_student_record error: {e}")
         return None
 
 
 def fetch_batch_with_students(batch_id):
-    """Convenience: (batch_doc, student_docs) or (None, None) if not found."""
     batch = fetch_batch(batch_id)
     if batch is None:
         return None, None
     return batch, fetch_students(batch_id)
 
 
-# -----------------------------------------
-# REVALUATION SUPPORT
-# -----------------------------------------
+# ── CREDITS & SGPA ──────────────────────────────────────────────────────────
 
-def save_revaluation(original_batch_id, batch_doc, student_docs):
-    """Save revaluation results linked to an original batch.
-
-    Creates a new batch with result_type='revaluation' and stores the
-    original_batch_id reference. Comparison is computed on demand, not stored.
-    Returns (reval_batch_id, added_count, error_msg).
-    """
+def save_credits(batch_id, credits_map):
     if not is_connected():
-        return None, 0, "MongoDB not connected"
+        return False, "Supabase not connected"
     try:
-        batch_doc["result_type"] = "revaluation"
-        batch_doc["original_batch_id"] = original_batch_id
-
-        reval_batch_id = _batches_coll().insert_one(batch_doc).inserted_id
-
-        # Deduplicate USNs within this batch
-        seen_usns = set()
-        unique_docs = []
-        for s in student_docs:
-            u = s.get("usn", "")
-            if u and u not in seen_usns:
-                seen_usns.add(u)
-                s["batch_id"] = reval_batch_id
-                unique_docs.append(s)
-
-        if unique_docs:
-            _students_coll().insert_many(unique_docs)
-
-        return str(reval_batch_id), len(unique_docs), None
-    except PyMongoError as e:
-        return None, 0, str(e)
-
-
-def get_revaluation_comparison(reval_batch_id, original_batch_id=None):
-    """Get revaluation comparison data for all students in a reval batch.
-
-    If original_batch_id is provided, compares against that batch.
-    Otherwise uses the linked original_batch_id from the reval batch doc.
-    Returns list of {usn, name, comparison: [...], summary: {...}}.
-    """
-    if not is_connected():
-        return []
-    try:
-        # Resolve original batch
-        if not original_batch_id:
-            reval_doc = _batches_coll().find_one({"_id": ObjectId(reval_batch_id)})
-            if reval_doc and reval_doc.get("original_batch_id"):
-                original_batch_id = str(reval_doc["original_batch_id"])
-
-        orig_students = fetch_students(original_batch_id) if original_batch_id else []
-        orig_map = {}
-        for s in orig_students:
-            orig_map[s["usn"]] = s
-
-        reval_students = fetch_students(reval_batch_id)
-        results = []
-        for s in reval_students:
-            usn = s.get("usn", "")
-            orig = orig_map.get(usn)
-            comp = []
-
-            reval_subs = {sub["code"]: sub for sub in s.get("subjects", [])}
-            orig_subs = {}
-            if orig:
-                orig_subs = {sub["code"]: sub for sub in orig.get("subjects", [])}
-
-            all_codes = sorted(set(list(reval_subs.keys()) + list(orig_subs.keys())))
-
-            for code in all_codes:
-                reval_sub = reval_subs.get(code, {})
-                orig_sub = orig_subs.get(code, {})
-
-                orig_total = orig_sub.get("total")
-                new_total = reval_sub.get("total")
-                orig_internal = orig_sub.get("internal")
-                new_internal = reval_sub.get("internal")
-                orig_external = orig_sub.get("external")
-                new_external = reval_sub.get("external")
-                orig_result = orig_sub.get("result", "")
-                new_result = reval_sub.get("result", "")
-
-                change = 0
-                status = "No Change"
-                if orig_total is not None and new_total is not None:
-                    change = (new_total or 0) - (orig_total or 0)
-                    if change > 0:
-                        status = "Improved"
-                    elif change < 0:
-                        status = "Decreased"
-                    else:
-                        status = "No Change"
-                elif orig_total is None and new_total is not None:
-                    status = "New"
-                elif orig_total is not None and new_total is None:
-                    status = "Removed"
-
-                result_changed = ""
-                if orig_result != new_result:
-                    if orig_result == "F" and new_result != "F":
-                        result_changed = "New Pass"
-                    elif orig_result != "F" and new_result == "F":
-                        result_changed = "New Fail"
-                    else:
-                        result_changed = "Grade Changed"
-
-                comp.append({
-                    "code": code,
-                    "subject_name": reval_sub.get("subject_name", "") or orig_sub.get("subject_name", ""),
-                    "orig_total": orig_total,
-                    "new_total": new_total,
-                    "orig_internal": orig_internal,
-                    "new_internal": new_internal,
-                    "orig_external": orig_external,
-                    "new_external": new_external,
-                    "orig_result": orig_result,
-                    "new_result": new_result,
-                    "change": change,
-                    "status": status,
-                    "result_changed": result_changed,
-                })
-
-            improved = sum(1 for c in comp if c["status"] == "Improved")
-            decreased = sum(1 for c in comp if c["status"] == "Decreased")
-            no_change = sum(1 for c in comp if c["status"] == "No Change")
-            new_pass = sum(1 for c in comp if c["result_changed"] == "New Pass")
-            orig_total_sum = sum(c.get("orig_total") or 0 for c in comp if c.get("orig_total") is not None)
-            new_total_sum = sum(c.get("new_total") or 0 for c in comp if c.get("new_total") is not None)
-
-            results.append({
-                "usn": usn,
-                "name": s.get("name", ""),
-                "percentage": s.get("percentage"),
-                "result_status": s.get("result_status", ""),
-                "comparison": comp,
-                "summary": {
-                    "improved": improved,
-                    "decreased": decreased,
-                    "no_change": no_change,
-                    "new_pass": new_pass,
-                    "orig_total": orig_total_sum,
-                    "new_total": new_total_sum,
-                    "total_change": new_total_sum - orig_total_sum,
-                },
-            })
-        return results
+        client.table("fetch_batches").update({
+            "credits": json.dumps(credits_map),
+            "credits_updated_at": _now(),
+        }).eq("id", batch_id).execute()
+        return True, None
     except Exception as e:
-        print(f"[MongoDB] get_revaluation_comparison error: {e}")
-        return []
+        return False, str(e)
 
 
-def find_original_batch(reval_batch_id):
-    """Find the original batch linked to a revaluation batch."""
+def get_credits(batch_id):
     if not is_connected():
-        return None
+        return {}
     try:
-        reval = _batches_coll().find_one({"_id": ObjectId(reval_batch_id)})
-        if reval and reval.get("original_batch_id"):
-            return fetch_batch(reval["original_batch_id"])
-        return None
+        result = client.table("fetch_batches").select("credits").eq("id", batch_id).execute()
+        rows = result.data or []
+        if not rows:
+            return {}
+        credits = rows[0].get("credits", {})
+        if isinstance(credits, str):
+            credits = json.loads(credits)
+        return credits or {}
     except Exception:
-        return None
+        return {}
+
+
+def compute_sgpa(students, credits_map):
+    for s in students:
+        total_credits = 0
+        total_points = 0
+        subjects = s.get("subjects", []) or []
+        if isinstance(subjects, str):
+            subjects = json.loads(subjects)
+        for subj in subjects:
+            code = subj.get("code", "")
+            cr = credits_map.get(code)
+            if cr is None:
+                continue
+            try:
+                cr = float(cr)
+            except (TypeError, ValueError):
+                continue
+            # Use reval'd grade if available
+            grade = subj.get("final_grade") if subj.get("is_revaluated") and subj.get("final_grade") else subj.get("grade", "")
+            if not grade:
+                # Fallback: compute from best available total
+                if subj.get("is_revaluated") and subj.get("final_total") is not None:
+                    best_total = subj["final_total"]
+                elif subj.get("is_revaluated") and subj.get("final_marks") is not None and subj.get("internal") is not None:
+                    best_total = subj["internal"] + subj["final_marks"]
+                else:
+                    best_total = subj.get("total")
+                grade = _grade(best_total) if best_total is not None else ""
+            gp = GRADE_POINTS.get(grade)
+            if gp is None:
+                gp = 0
+            total_credits += cr
+            total_points += gp * cr
+        s["sgpa"] = round(total_points / total_credits, 2) if total_credits > 0 else None
+    return students
+
+
+def _grade(marks):
+    """Map total marks to a VTU grade."""
+    try:
+        m = float(marks)
+    except (TypeError, ValueError):
+        return ""
+    if m >= 90: return "O"
+    if m >= 80: return "A+"
+    if m >= 70: return "A"
+    if m >= 60: return "B+"
+    if m >= 55: return "B"
+    if m >= 50: return "C"
+    if m >= 40: return "P"
+    return "F"
+
+
+def update_student_result(batch_id, usn, name, subjects, result_status):
+    """Replace a student's result data in a batch. Returns True on success."""
+    if not is_connected():
+        return False
+    try:
+        # Find existing student
+        existing = client.table("student_results").select("id").eq("batch_id", batch_id).eq("usn", usn).execute()
+        rows = existing.data or []
+        if rows:
+            # Update existing
+            client.table("student_results").update({
+                "name": name,
+                "subjects": json.dumps(subjects),
+                "result_status": result_status,
+            }).eq("id", rows[0]["id"]).execute()
+        else:
+            # Insert new
+            client.table("student_results").insert({
+                "batch_id": batch_id,
+                "usn": usn,
+                "name": name,
+                "subjects": json.dumps(subjects),
+                "result_status": result_status,
+            }).execute()
+        return True
+    except Exception as e:
+        print(f"[Supabase] update_student_result error: {e}")
+        return False
+
+
+def update_student_result_reval(batch_id, usn, name, new_subjects, result_status):
+    """Apply revaluation update: preserve original marks for reval'd subjects,
+    keep non-reval'd subjects untouched.
+
+    new_subjects should have ALL subjects. For subjects with reval data,
+    include original_external/original_total/original_result/original_grade
+    and is_revaluated=True. For non-reval'd subjects, include the original
+    DB values unchanged.
+    """
+    if not is_connected():
+        return False
+    try:
+        # Fetch current student from DB
+        existing = client.table("student_results").select("id, subjects").eq("batch_id", batch_id).eq("usn", usn).execute()
+        rows = existing.data or []
+        if not rows:
+            return False
+
+        row_id = rows[0]["id"]
+        old_subjects_raw = rows[0].get("subjects", [])
+        if isinstance(old_subjects_raw, str):
+            old_subjects_raw = json.loads(old_subjects_raw)
+
+        # Build lookup of old subjects by code
+        old_map = {s.get("code", ""): s for s in old_subjects_raw}
+
+        merged_subjects = []
+        for subj in new_subjects:
+            code = subj.get("code", "")
+            old_subj = old_map.get(code, {})
+            is_reval = subj.get("is_revaluated", False)
+
+            merged = dict(subj)
+
+            if is_reval:
+                # Preserve originals: use old DB values if not already set
+                if not merged.get("original_external"):
+                    merged["original_external"] = old_subj.get("original_external") or old_subj.get("external")
+                if not merged.get("original_total"):
+                    merged["original_total"] = old_subj.get("original_total") or old_subj.get("total")
+                if not merged.get("original_result"):
+                    merged["original_result"] = old_subj.get("original_result") or old_subj.get("result")
+                if not merged.get("original_grade"):
+                    merged["original_grade"] = old_subj.get("original_grade") or old_subj.get("grade")
+                merged["is_revaluated"] = True
+            else:
+                # Non-reval'd subject: keep old DB values exactly
+                if old_subj:
+                    merged = dict(old_subj)
+
+            merged_subjects.append(merged)
+
+        client.table("student_results").update({
+            "name": name,
+            "subjects": json.dumps(merged_subjects),
+            "result_status": result_status,
+        }).eq("id", row_id).execute()
+        return True
+    except Exception as e:
+        print(f"[Supabase] update_student_result_reval error: {e}")
+        return False

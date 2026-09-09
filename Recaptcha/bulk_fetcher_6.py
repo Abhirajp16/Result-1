@@ -37,11 +37,22 @@ if len(sys.argv) > 1:
 # Unique run identifier (passed by app.py) — appears in logs with [SUBJECTS]:
 RUN_ID = sys.argv[2] if len(sys.argv) > 2 else time.strftime("%Y%m%d-%H%M%S")
 
+# Custom CSV path (for reval mode)
+REVAL_MODE = False
+REVAL_BATCH_ID = ""
+for i, arg in enumerate(sys.argv):
+    if arg == "--reval":
+        REVAL_MODE = True
+    elif arg == "--batch-id" and i + 1 < len(sys.argv):
+        REVAL_BATCH_ID = sys.argv[i + 1]
+    elif arg.startswith("--csv="):
+        INPUT_CSV = arg.split("=", 1)[1]
+
 MODEL_FILE = "vtu_captcha_predictor.h5"
-INPUT_CSV = "students.csv"
-RAW_DATA = "raw_results.csv"
-RAW_SUMMARY = "raw_summary.csv"
-OUTPUT_EXCEL = "vtu_results.xlsx"
+INPUT_CSV = "students.csv" if not REVAL_MODE else "reval_students.csv"
+RAW_DATA = "raw_results_rv.csv" if REVAL_MODE else "raw_results.csv"
+RAW_SUMMARY = "raw_summary_rv.csv" if REVAL_MODE else "raw_summary.csv"
+OUTPUT_EXCEL = "vtu_results_rv.xlsx" if REVAL_MODE else "vtu_results.xlsx"
 
 IMG_WIDTH = 160
 IMG_HEIGHT = 75
@@ -98,11 +109,7 @@ def predict_captcha(model, img_batch):
 
 
 def analyze_captcha(model, img_path):
-    """Fast single-pass captcha analysis.
-
-    Reads the image once, preprocesses, runs model, returns (text, confidence).
-    Total time: ~0.1-0.3 seconds.
-    """
+    """Captcha analysis matching exact training preprocessing."""
     img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
     if img is None:
         return "", 0.0
@@ -153,74 +160,78 @@ def scrape(html):
     sub_rows = []
     total, max_total = 0, 0
 
-    # --- Subject table: div-table layout (6 or 7 columns, both VTU layouts).
-    # Some pages carry several divTableBody blocks (identity / subjects /
-    # legend), so scan every divTableRow in the document. ---
-    # Also handles revaluation layout: 9 columns with Old/RV/Final marks.
-    rows = soup.find_all("div", {"class": "divTableRow"})
-    for r in rows:
+    # Detect revaluation page by checking for RV-related headers
+    is_reval = False
+    page_text_lower = html.lower()
+    if "rv marks" in page_text_lower or "rv result" in page_text_lower or "revaluation" in page_text_lower or "marks after rv" in page_text_lower:
+        is_reval = True
+        print("[Reval] Revaluation page detected")
+
+    # --- Subject table: div-table layout ---
+    all_rows = soup.find_all("div", {"class": "divTableRow"})
+    for r in all_rows:
         c = r.find_all("div", {"class": "divTableCell"})
         if len(c) < 6:
             continue
         code = c[0].text.strip()
-        # Skip header / legend / info rows: a subject code is a short
-        # alphanumeric token like BCS801, BINT803B, 20MATCS11
         if "Subject Code" in code or not re.match(r"^[A-Za-z0-9]{2,8}$", code):
             continue
 
-        num_cols = len(c)
+        if is_reval:
+            print("[Reval] Row cells (%d): %s" % (len(c), [x.text.strip()[:25] for x in c]))
 
-        if num_cols >= 9:
-            # Revaluation layout: Code|Name|Internal|OldMarks|OldResult|RVMarks|RVResult|FinalMarks|FinalResult
-            tmarks = c[7].text.strip()  # Final Marks
-            row = {
+        if is_reval and len(c) >= 9:
+            old_marks = c[3].text.strip()
+            old_result = c[4].text.strip()
+            rv_marks = c[5].text.strip()
+            rv_result = c[6].text.strip()
+            final_result = c[8].text.strip()
+            internal = c[2].text.strip()
+            # TOTAL = INTERNAL + REVALUATION EXTERNAL
+            try:
+                int_val = int(internal)
+                rv_ext = int(rv_marks)
+                final_total = int_val + rv_ext
+            except (ValueError, TypeError):
+                final_total = old_marks
+            entry = {
                 "Subject Code": code,
                 "Subject Name": c[1].text.strip(),
-                "Internal Marks": c[2].text.strip(),
-                "External Marks": c[3].text.strip(),  # Old Marks
-                "Total Marks": tmarks,
-                "Result": c[4].text.strip(),  # Old Result
-                "Old Marks": c[3].text.strip(),
-                "Old Result": c[4].text.strip(),
-                "RV Marks": c[5].text.strip(),
-                "RV Result": c[6].text.strip(),
-                "Final Marks": c[7].text.strip(),
-                "Final Result": c[8].text.strip(),
-                "Announced / Updated on": c[9].text.strip() if len(c) > 9 else "",
-                "has_reval": True,
+                "Internal Marks": internal,
+                "External Marks": old_marks,
+                "Total Marks": str(final_total),
+                "Result": final_result or old_result,
+                "Announced / Updated on": "",
+                "Old Marks": old_marks,
+                "Old Result": old_result,
+                "RV Marks": rv_marks,
+                "RV Result": rv_result,
+                "Final Marks": str(final_total),
+                "Final Result": final_result,
             }
-        elif num_cols >= 7:
-            # Normal layout: Code|Name|Internal|External|Total|Result|Announced
-            tmarks = c[4].text.strip()
-            row = {
-                "Subject Code": code,
-                "Subject Name": c[1].text.strip(),
-                "Internal Marks": c[2].text.strip(),
-                "External Marks": c[3].text.strip(),
-                "Total Marks": tmarks,
-                "Result": c[5].text.strip(),
-                "Announced / Updated on": c[6].text.strip() if len(c) > 6 else "",
-                "has_reval": False,
-            }
+            try:
+                total += final_total
+            except:
+                pass
         else:
-            # Minimal layout: Code|Name|Internal|External|Total|Result
             tmarks = c[4].text.strip()
-            row = {
+            res = c[5].text.strip()
+
+            entry = {
                 "Subject Code": code,
                 "Subject Name": c[1].text.strip(),
                 "Internal Marks": c[2].text.strip(),
                 "External Marks": c[3].text.strip(),
                 "Total Marks": tmarks,
-                "Result": c[5].text.strip(),
-                "has_reval": False,
+                "Result": res,
+                "Announced / Updated on": c[6].text.strip() if len(c) > 6 else "",
             }
+            try:
+                total += int(tmarks)
+            except:
+                pass
 
-        sub_rows.append(row)
-
-        try:
-            total += int(tmarks)
-        except:
-            pass
+        sub_rows.append(entry)
 
         max_total += 100
 
@@ -232,7 +243,6 @@ def scrape(html):
             if not any("Subject Code" in h for h in headers):
                 continue
             col = {h: i for i, h in enumerate(headers)}
-            has_rv_header = any("RV" in h.upper() or "REVAL" in h.upper() or "OLD MARKS" in h.upper() for h in headers)
             for tr in table.find_all("tr"):
                 cells = tr.find_all("td")
                 if len(cells) < 7 or "Subject Code" in cells[0].get_text(strip=True):
@@ -241,34 +251,32 @@ def scrape(html):
                 code = cell("Subject Code")
                 if not code:
                     continue
-                tmarks = cell("Total Marks") or cell("Total") or cell("Marks") or cell("Final Marks")
-                if has_rv_header and len(cells) >= 9:
-                    row = {
-                        "Subject Code": code,
-                        "Subject Name": cell("Subject Name"),
-                        "Internal Marks": cell("Internal Marks"),
-                        "External Marks": cell("Old Marks") or cell("External Marks"),
-                        "Total Marks": tmarks,
-                        "Result": cell("Old Result") or cell("Result"),
-                        "Old Marks": cell("Old Marks"),
-                        "Old Result": cell("Old Result"),
-                        "RV Marks": cell("RV Marks"),
-                        "RV Result": cell("RV Result"),
-                        "Final Marks": cell("Final Marks"),
-                        "Final Result": cell("Final Result"),
-                        "has_reval": True,
-                    }
-                else:
-                    row = {
-                        "Subject Code": code,
-                        "Subject Name": cell("Subject Name"),
-                        "Internal Marks": cell("Internal Marks"),
-                        "External Marks": cell("External Marks"),
-                        "Total Marks": tmarks,
-                        "Result": cell("Result"),
-                        "has_reval": False,
-                    }
-                sub_rows.append(row)
+                tmarks = cell("Total Marks") or cell("Total") or cell("Marks")
+                entry = {
+                    "Subject Code": code,
+                    "Subject Name": cell("Subject Name"),
+                    "Internal Marks": cell("Internal Marks"),
+                    "External Marks": cell("External Marks"),
+                    "Total Marks": tmarks,
+                    "Result": cell("Result"),
+                    "Announced / Updated on": cell("Announced / Updated on"),
+                }
+                if is_reval:
+                    rv_marks = cell("RV Marks") or cell("RV Marks Secured") or ""
+                    entry["RV Marks"] = rv_marks
+                    entry["RV Result"] = cell("RV Result") or ""
+                    entry["Final Result"] = cell("Final Result") or cell("Result After RV") or cell("Result")
+                    # TOTAL = INTERNAL + REVALUATION EXTERNAL
+                    try:
+                        int_val = int(entry["Internal Marks"])
+                        rv_ext = int(rv_marks)
+                        computed_total = int_val + rv_ext
+                        entry["Total Marks"] = str(computed_total)
+                        entry["Final Marks"] = str(computed_total)
+                        tmarks = entry["Total Marks"]
+                    except (ValueError, TypeError):
+                        entry["Final Marks"] = cell("Final Marks") or cell("Marks After RV") or tmarks
+                sub_rows.append(entry)
                 try:
                     total += int(tmarks)
                 except:
@@ -394,39 +402,25 @@ def generate_excel():
 
         codes = sorted(subs_df["Subject Code"].dropna().unique().tolist())
         sub_info = {}
-        reval_cols = ["Old Marks", "Old Result", "RV Marks", "RV Result", "Final Marks", "Final Result"]
-        has_reval_data = any(c in subs_df.columns for c in reval_cols)
         for _, r in subs_df.iterrows():
             key = (str(r["USN"]).strip(), r["Subject Code"])
             sub_info.setdefault(key, {})["name"] = str(r["Subject Name"])
             sub_info[key]["grade"] = _grade(r["Total Marks"])
-            if has_reval_data:
-                for rc in reval_cols:
-                    if rc in subs_df.columns:
-                        sub_info[key][rc.lower().replace(" ", "_")] = str(r.get(rc, ""))
-
-        pivot_vals = ["Internal Marks", "External Marks", "Total Marks", "Result"]
-        if has_reval_data:
-            pivot_vals += [c for c in reval_cols if c in subs_df.columns]
 
         pivot = pd.pivot_table(
             subs_df,
             index=["USN", "Name"],
             columns="Subject Code",
-            values=pivot_vals,
+            values=["Internal Marks", "External Marks", "Total Marks", "Result"],
             aggfunc="first"
         )
         pivot.columns = [f"{c2} - {c1}" for c1, c2 in pivot.columns]
         pivot.reset_index(inplace=True)
 
-        # Reorder columns so every subject's block sits together:
         order = ["USN", "Name"]
         for code in codes:
             order.append(f"{code} - Subject Name")
-            suffixes = ["Internal Marks", "External Marks", "Total Marks", "Grade", "Result"]
-            if has_reval_data:
-                suffixes += [c for c in reval_cols if any(f"{code} - {c}" in col for col in pivot.columns)]
-            for suf in suffixes:
+            for suf in ("Internal Marks", "External Marks", "Total Marks", "Grade", "Result"):
                 order.append(f"{code} - {suf}")
         for col in order:
             if col not in pivot.columns:
@@ -442,12 +436,6 @@ def generate_excel():
                 if info:
                     pivot.at[idx, f"{code} - Subject Name"] = info.get("name", "")
                     pivot.at[idx, f"{code} - Grade"] = info.get("grade", "")
-                    if has_reval_data:
-                        for rc in reval_cols:
-                            key = rc.lower().replace(" ", "_")
-                            col_name = f"{code} - {rc}"
-                            if col_name in pivot.columns and key in info:
-                                pivot.at[idx, col_name] = info[key]
         pivot = pivot.replace({pd.NA: ""}).fillna("")
 
         summ_df["Percentage"] = summ_df["percentage"].apply(lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else "")
@@ -643,12 +631,15 @@ def main():
                 if not validate_captcha(pred):
                     print("[Info] Bad captcha prediction, refreshing and retrying.")
                     safe_refresh(driver)
-                    time.sleep(0.2)
+                    time.sleep(0.3)
                     continue
 
-                # If confidence is low, still try but log warning
-                if confidence < 0.90:
-                    print("[Info] Low confidence prediction, trying anyway...")
+                # If confidence is low, refresh for a new captcha instead of risking wrong input
+                if confidence < 0.85:
+                    print("[Info] Low confidence (%.1f%%), refreshing captcha..." % (confidence * 100))
+                    safe_refresh(driver)
+                    time.sleep(0.3)
+                    continue
 
                 # --- Step 2: fill USN and captcha ---
                 try:
@@ -676,6 +667,8 @@ def main():
                     accept_alert_if_present(driver, timeout=0.5)
                     safe_refresh(driver)
                     continue
+
+                time.sleep(0.15)
 
                 # Click submit
                 try:
@@ -729,11 +722,21 @@ def main():
                     page_html = driver.page_source
                     (u, name), subs, summ = scrape(page_html)
 
+                    # Always save debug HTML for reval pages
+                    if REVAL_MODE:
+                        try:
+                            with open("debug_reval_page.html", "w", encoding="utf-8") as df:
+                                df.write(page_html)
+                            print("[Debug] Saved reval page HTML (%d subjects)" % len(subs))
+                        except Exception:
+                            pass
+
                     if len(subs) == 0:
                         try:
-                            with open("debug_page.html", "w", encoding="utf-8") as df:
+                            dbg = "debug_reval_page.html" if REVAL_MODE else "debug_page.html"
+                            with open(dbg, "w", encoding="utf-8") as df:
                                 df.write(page_html)
-                            print("[Debug] 0 subjects - saved to debug_page.html (URL: %s)" % driver.current_url)
+                            print("[Debug] 0 subjects - saved to %s (URL: %s)" % (dbg, driver.current_url))
                         except Exception:
                             pass
                         if "not found" in page_html.lower() or "no result" in page_html.lower() or "not declared" in page_html.lower():

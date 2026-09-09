@@ -75,10 +75,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .sr-pill-pass{background:#D1FAE5;color:#065F46;padding:2px 8px;border-radius:4px;font-weight:700;font-size:.75rem;}
 .sr-pill-fail{background:#FEE2E2;color:#991B1B;padding:2px 8px;border-radius:4px;font-weight:700;font-size:.75rem;}
 
-.history-box{margin-top:20px;background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:16px 20px;}
-.history-box h3{font-size:.9rem;color:var(--ink);margin-bottom:10px;}
-.history-entry{padding:10px 14px;border-radius:10px;margin-bottom:8px;font-size:.82rem;background:#F9FAFB;border:1px solid var(--line);}
-
 @media(max-width:700px){
   .sr-header{padding:20px;flex-direction:column;text-align:center;}
   .sr-header-right{text-align:center;}
@@ -116,9 +112,9 @@ function gradeClass(g){return{O:"sr-grade-o","A+":"sr-grade-aplus",A:"sr-grade-a
 function ordinal(n){return["","1ST","2ND","3RD","4TH","5TH","6TH","7TH","8TH"][n]||n+"TH";}
 
 function calcSGPA(subjects){
-  let tc=0,tp=0;
-  subjects.forEach(s=>{if(s.result==="F")return;const g=gradeOf(s.total);const gp=GRADE_POINTS[g];if(gp===undefined)return;tc+=4;tp+=gp*4;});
-  return tc>0?(tp/tc).toFixed(2):"—";
+  const withCredits=subjects.some(s=>s.credit!=null&&s.credit>0);
+  if(withCredits){let tc=0,tp=0;subjects.forEach(s=>{const isRv=s.is_revaluated&&s.final_grade;const g=isRv?s.final_grade:gradeOf(s.total);const gp=GRADE_POINTS[g];if(gp===undefined)return;if(s.credit==null)return;tc+=s.credit;tp+=gp*s.credit;});return tc>0?(tp/tc).toFixed(2):"—";}
+  let tc=0,tp=0;subjects.forEach(s=>{const isRv=s.is_revaluated&&s.final_grade;const g=isRv?s.final_grade:gradeOf(s.total);const gp=GRADE_POINTS[g];if(gp===undefined)return;tc+=4;tp+=gp*4;});return tc>0?(tp/tc).toFixed(2):"—";
 }
 
 function search(){
@@ -131,7 +127,7 @@ function search(){
 
   fetch("/api/student-record/"+usn)
     .then(r=>{if(!r.ok)throw new Error("Not found");return r.json();})
-    .then(data=>{if(data.error)throw new Error(data.error);render(data);saveToHistory(data);})
+    .then(data=>{if(data.error)throw new Error(data.error);render(data);})
     .catch(e=>{area.innerHTML='<div class="error-msg">Student not found: '+usn+'</div>';});
 }
 
@@ -151,7 +147,7 @@ function render(data){
     const num=semNum(s.semester);
     const sgpa=calcSGPA(s.subjects||[]);
     semSGPAs[num]=sgpa;
-    totalBacklogs+=(s.subjects||[]).filter(sub=>sub.result==="F").length;
+    totalBacklogs+=(s.subjects||[]).filter(sub=>{const r=sub.is_revaluated&&sub.final_result?sub.final_result:sub.result;return r==="F";}).length;
   });
   const sgpas=Object.values(semSGPAs).filter(v=>v!=="—").map(Number);
   const cgpa=sgpas.length?(sgpas.reduce((a,b)=>a+b,0)/sgpas.length).toFixed(2):"—";
@@ -189,46 +185,46 @@ function render(data){
         <thead><tr><th>#</th><th>Subject Code</th><th>Subject Name</th><th style="text-align:center">INT</th><th style="text-align:center">EXT</th><th style="text-align:center">TOTAL</th><th style="text-align:center">GRADE</th><th style="text-align:center">RES</th></tr></thead>
         <tbody>`;
     subs.forEach((sub,i)=>{
-      const g=gradeOf(sub.total);const gc=gradeClass(g);const pass=sub.result!=="F";
+      const isRv=sub.is_revaluated===true;
+      const bestTotal=isRv&&sub.final_total!=null?sub.final_total:sub.total;
+      const bestResult=isRv&&sub.final_result?sub.final_result:(sub.result||"");
+      const bestGrade=isRv&&sub.final_grade?sub.final_grade:gradeOf(bestTotal);
+      const gc=gradeClass(bestGrade);const pass=bestResult!=="F";
+      const origExt=sub.original_external!=null?sub.original_external:sub.external;
+      const origTot=sub.original_total!=null?sub.original_total:sub.total;
+      const origRes=sub.original_result||sub.result||"";
+      const origGrd=sub.original_grade||gradeOf(origTot);
+      const rvBadge=isRv?' <span style="background:#059669;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;vertical-align:middle;">RV</span>':"";
+      let extCell, totalCell, gradeCell, resCell;
+      if(isRv&&sub.rv_marks!=null){
+        extCell=`<td class="sr-marks"><span style="text-decoration:line-through;color:#9CA3AF;">${origExt!=null?origExt:"—"}</span> <span style="font-weight:700;color:#059669;">${sub.rv_marks}</span></td>`;
+        totalCell=`<td class="sr-marks" style="font-weight:800;"><span style="text-decoration:line-through;color:#9CA3AF;">${origTot!=null?origTot:"—"}</span> <span style="color:#059669;">${bestTotal!=null?bestTotal:"—"}</span></td>`;
+        gradeCell=`<td style="text-align:center"><span style="text-decoration:line-through;color:#9CA3AF;font-size:.7rem;">${origGrd}</span> <span class="sr-grade ${gc}">${bestGrade}</span></td>`;
+        resCell=`<td style="text-align:center"><span style="text-decoration:line-through;color:#9CA3AF;">${origRes}</span> <span class="${pass?'sr-pill-pass':'sr-pill-fail'}">${bestResult||"—"}</span></td>`;
+      } else {
+        extCell=`<td class="sr-marks">${sub.external!=null?sub.external:"—"}</td>`;
+        totalCell=`<td class="sr-marks" style="font-weight:800;">${bestTotal!=null?bestTotal:"—"}</td>`;
+        gradeCell=`<td style="text-align:center"><span class="sr-grade ${gc}">${bestGrade}</span></td>`;
+        resCell=`<td style="text-align:center"><span class="${pass?'sr-pill-pass':'sr-pill-fail'}">${bestResult||"—"}</span></td>`;
+      }
       h+=`<tr>
         <td>${i+1}</td>
-        <td style="font-family:monospace;font-weight:600;">${sub.code}</td>
+        <td style="font-family:monospace;font-weight:600;">${sub.code}${rvBadge}</td>
         <td>${sub.subject_name||""}</td>
         <td class="sr-marks">${sub.internal!=null?sub.internal:"—"}</td>
-        <td class="sr-marks">${sub.external!=null?sub.external:"—"}</td>
-        <td class="sr-marks" style="font-weight:800;">${sub.total!=null?sub.total:"—"}</td>
-        <td style="text-align:center"><span class="sr-grade ${gc}">${g}</span></td>
-        <td style="text-align:center"><span class="${pass?'sr-pill-pass':'sr-pill-fail'}">${sub.result||"—"}</span></td>
+        ${extCell}
+        ${totalCell}
+        ${gradeCell}
+        ${resCell}
       </tr>`;
     });
     h+='</tbody></table></div></div>';
   });
 
-  // history
-  const hist=getHistory(data.usn);
-  if(hist.length>1){
-    h+='<div class="history-box"><h3>Result History</h3>';
-    hist.forEach((entry,i)=>{
-      const dt=entry.fetched_at?new Date(entry.fetched_at).toLocaleString():"Unknown";
-      const sgpa_list=entry.sgpas||[];
-      const c=sgpa_list.length?(sgpa_list.reduce((a,b)=>a+b,0)/sgpa_list.length).toFixed(2):"—";
-      h+=`<div class="history-entry"><strong>${entry.label||"Result "+(i+1)}</strong> — ${dt} <span style="margin-left:12px;color:#059669;font-weight:700;">CGPA: ${c}</span></div>`;
-    });
-    h+='</div>';
-  }
-
   area.innerHTML=h;
 }
 
-function getHistory(usn){try{return JSON.parse(localStorage.getItem("sr_history_"+usn)||"[]");}catch(e){return[];}}
-function saveToHistory(data){
-  try{
-    const hist=getHistory(data.usn);
-    const sgpas=(data.semesters||[]).map(s=>{const v=calcSGPA(s.subjects||[]);return v!=="—"?parseFloat(v):null;}).filter(v=>v!==null);
-    const entry={label:"Fetched Result",fetched_at:new Date().toISOString(),sem_count:(data.semesters||[]).length,sgpas,data};
-    if(!hist.some(e=>JSON.stringify(e.data)===JSON.stringify(data))){hist.push(entry);if(hist.length>10)hist.shift();localStorage.setItem("sr_history_"+data.usn,JSON.stringify(hist));}
-  }catch(e){}
-}
+
 </script>
 </body>
 </html>

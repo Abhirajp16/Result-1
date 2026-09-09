@@ -374,39 +374,6 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .fc-m-ext { background: #fce7f3; color: #be185d; }
 .fc-m-tot { background: #fef3c7; color: #92400e; }
 
-/* ---------- revaluation ---------- */
-.rv-student-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 16px; overflow: hidden; }
-.rv-student-header { background: linear-gradient(135deg, #1C7A5E 0%, #123D2E 100%); color: #fff; padding: 14px 18px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.rv-student-header .rv-usn { font-weight: 800; font-size: 1rem; }
-.rv-student-header .rv-name { font-size: .85rem; opacity: .85; }
-.rv-student-header .rv-badge { font-size: .75rem; padding: 3px 8px; border-radius: 6px; font-weight: 700; margin-left: auto; }
-.rv-badge-improved { background: #D1FAE5; color: #065F46; }
-.rv-badge-nochange { background: #E5E7EB; color: #374151; }
-.rv-badge-decreased { background: #FEE2E2; color: #991B1B; }
-
-.rv-summary-row { display: flex; gap: 10px; padding: 10px 18px; background: #f9fafb; border-bottom: 1px solid var(--line); flex-wrap: wrap; font-size: .82rem; }
-.rv-summary-row .rv-sum-item { padding: 4px 10px; border-radius: 6px; font-weight: 600; }
-.rv-sum-orig { background: #FEF3C7; color: #92400E; }
-.rv-sum-new { background: #D1FAE5; color: #065F46; }
-.rv-sum-change { background: #DBEAFE; color: #1E40AF; }
-
-.rv-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
-.rv-table th { background: var(--header-bg); color: #fff; padding: 8px 10px; text-align: left; font-weight: 600; white-space: nowrap; }
-.rv-table td { padding: 7px 10px; border-bottom: 1px solid var(--line); font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: .8rem; }
-.rv-table tr:last-child td { border-bottom: none; }
-.rv-chg-pos { color: #059669; font-weight: 700; }
-.rv-chg-neg { color: #DC2626; font-weight: 700; }
-.rv-chg-zero { color: #6B7280; }
-.rv-status-improved { background: #D1FAE5; color: #065F46; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: .75rem; }
-.rv-status-decreased { background: #FEE2E2; color: #991B1B; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: .75rem; }
-.rv-status-nochange { background: #E5E7EB; color: #374151; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: .75rem; }
-.rv-status-newpass { background: #D1FAE5; color: #065F46; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: .75rem; border: 1px solid #059669; }
-
-.rv-highlight-box { padding: 10px 14px; border-radius: 10px; margin-bottom: 8px; font-size: .83rem; }
-.rv-hl-improved { background: #ECFDF5; border-left: 3px solid #059669; }
-.rv-hl-changed { background: #EFF6FF; border-left: 3px solid #2563EB; }
-.rv-hl-nochange { background: #F9FAFB; border-left: 3px solid #9CA3AF; }
-
 /* ---------- student record overlay ---------- */
 .sr-overlay { position: fixed; inset: 0; z-index: 9000; background: #f3f4f6; overflow-y: auto; display: none; }
 .sr-overlay.open { display: block; }
@@ -483,10 +450,6 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 
 #browse_table tr[onclick]:hover { background: #ECFDF5 !important; }
 
-.sr-diff-pos { color: #059669; }
-.sr-diff-neg { color: #DC2626; }
-.sr-diff-zero { color: #9CA3AF; }
-
 /* ---------- print styles ---------- */
 @media print {
   body * { visibility: hidden; }
@@ -524,9 +487,9 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
     </div>
     <nav class="tabs">
       <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+      <button class="tab-btn" data-tab="reval">Revaluation</button>
       <button class="tab-btn" data-tab="analytics">Analytics</button>
       <button class="tab-btn" data-tab="browse">Browse Records</button>
-      <button class="tab-btn" data-tab="revaluation">Revaluation</button>
     </nav>
   </div>
 </header>
@@ -606,6 +569,83 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
       <span id="save_db_note" style="color:var(--muted);font-size:13px;"></span>
     </div>
   </div>
+
+  <div class="panel" id="credits_panel" style="display:none;">
+    <h2 style="font-size:14px;font-weight:700;margin-bottom:12px;">Subject Credits</h2>
+    <div id="credits_row" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;"></div>
+    <div style="margin-top:12px;display:flex;align-items:center;gap:10px;">
+      <select id="credits_batch_sel" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fff;"></select>
+      <button class="btn sm" id="credits_save_btn">Save Credits & SGPA</button>
+      <span id="credits_status" style="color:#6b7280;font-size:12px;"></span>
+    </div>
+  </div>
+
+  </div>
+</section>
+
+<!-- ================= REVALUATION ================= -->
+<section id="tab-reval" class="tab-page">
+
+  <div class="panel" style="border:1px solid #A7F3D0;background:linear-gradient(180deg,#ECFDF5 0%,#fff 60%);">
+    <h2 style="font-size:15px;font-weight:800;margin-bottom:16px;color:#065F46;display:flex;align-items:center;gap:10px;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#10B981,#059669);color:#fff;box-shadow:0 2px 8px rgba(5,150,105,.3);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M21 21v-5h-5"/></svg>
+      </span>
+      Revaluation Fetch
+    </h2>
+    <div style="display:flex;flex-direction:column;gap:12px;max-width:520px;">
+      <div>
+        <label style="display:block;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;">VTU Revaluation URL</label>
+        <input id="rv_url" type="text" placeholder="https://results.vtu.ac.in/.../rcvaluation.php" value="https://results.vtu.ac.in/JJEcbcs25/rcvaluation.php"
+               style="width:100%;padding:10px 14px;border:1px solid #D1D5DB;border-radius:10px;font-size:13px;background:#fff;color:#1F2937;outline:none;transition:border-color .2s;box-shadow:0 1px 2px rgba(0,0,0,.04);" onfocus="this.style.borderColor='#10B981';this.style.boxShadow='0 0 0 3px rgba(16,185,129,.15)'" onblur="this.style.borderColor='#D1D5DB';this.style.boxShadow='0 1px 2px rgba(0,0,0,.04)'">
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;">Target Batch</label>
+        <select id="rv_batch_sel" style="width:100%;padding:10px 14px;border:1px solid #D1D5DB;border-radius:10px;font-size:13px;background:#fff;color:#1F2937;outline:none;transition:border-color .2s;">
+          <option value="">— select batch —</option>
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;">Student USNs</label>
+        <textarea id="rv_usns" rows="3" placeholder="Enter USNs (one per line or comma separated)"
+                  style="width:100%;padding:10px 14px;border:1px solid #D1D5DB;border-radius:10px;font-size:13px;resize:vertical;font-family:'SF Mono',Consolas,monospace;background:#fff;color:#1F2937;outline:none;transition:border-color .2s;" onfocus="this.style.borderColor='#10B981';this.style.boxShadow='0 0 0 3px rgba(16,185,129,.15)'" onblur="this.style.borderColor='#D1D5DB';this.style.boxShadow=''"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn" id="rv_start_btn" style="background:linear-gradient(135deg,#10B981,#059669);color:#fff;border:none;padding:10px 22px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(5,150,105,.3);transition:transform .15s,box-shadow .15s;" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 4px 12px rgba(5,150,105,.4)'" onmouseout="this.style.transform='';this.style.boxShadow='0 2px 8px rgba(5,150,105,.3)'">Start Reval Fetch</button>
+        <button class="btn warn" id="rv_stop_btn" style="display:none;">Stop</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 style="font-size:14px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:#F3F4F6;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      </span>
+      Live Log
+    </h2>
+    <div class="log-box">
+      <div class="log-head"><div class="log-dots"><i></i><i></i><i></i></div><div class="t">REVAL-SCRAPER</div></div>
+      <pre id="rv_log">Enter USNs and click Start Reval Fetch.</pre>
+    </div>
+  </div>
+
+  <div class="panel" id="rv_actions" style="display:none;border:1px solid #A7F3D0;background:linear-gradient(180deg,#ECFDF5 0%,#fff 60%);">
+    <h2 style="font-size:14px;font-weight:700;margin-bottom:8px;color:#065F46;display:flex;align-items:center;gap:8px;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:#D1FAE5;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-6"/></svg>
+      </span>
+      Compare & Store
+    </h2>
+    <p style="color:#6B7280;font-size:12px;margin-bottom:12px;">Enter a USN to compare old result with new revaluation result.</p>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input id="rv_compare_usn" type="text" placeholder="e.g. 1AA21CV001" style="padding:10px 14px;border:1px solid #D1D5DB;border-radius:10px;font-size:13px;font-family:'SF Mono',Consolas,monospace;width:220px;background:#fff;color:#1F2937;outline:none;transition:border-color .2s;" onfocus="this.style.borderColor='#10B981';this.style.boxShadow='0 0 0 3px rgba(16,185,129,.15)'" onblur="this.style.borderColor='#D1D5DB';this.style.boxShadow=''">
+      <button class="btn ghost" id="rv_compare_btn" style="border:1px solid #A7F3D0;color:#059669;background:#fff;padding:10px 18px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;transition:background .15s;" onmouseover="this.style.background='#ECFDF5'" onmouseout="this.style.background='#fff'">Compare</button>
+    </div>
+  </div>
+
+  <div id="rv_compare_area" style="display:none;"></div>
+
 </section>
 
 <!-- ================= ANALYTICS ================= -->
@@ -615,6 +655,7 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
     <div class="row">
       <select id="an_batch_sel"><option value="">— select a saved batch —</option></select>
       <div style="flex:0 0 auto;"><button class="btn ghost" id="an_refresh_btn">Refresh</button></div>
+      <div style="flex:0 0 auto;"><button class="btn warn" id="an_delete_btn" style="display:none;">Delete Batch</button></div>
     </div>
     <div id="an_empty" style="color:var(--muted);margin-top:14px;">No batches saved yet. Fetch results and use "Save to Database".</div>
   </div>
@@ -690,87 +731,6 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 
 </section>
 
-<!-- ================= REVALUATION ================= -->
-<section id="tab-revaluation" class="tab-page">
-  <div class="panel">
-    <h2><span class="h2-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></span>Revaluation Result Comparison</h2>
-    <p style="color:var(--ink-soft);font-size:.85rem;margin:0 0 14px;">Fetch revaluation results using the same USNs and compare with the original marks.</p>
-
-    <div class="row" style="flex-wrap:wrap;gap:10px;margin-bottom:14px;">
-      <div style="flex:1;min-width:200px;">
-        <label class="lbl">Original Batch</label>
-        <select id="rv_batch_sel" style="width:100%;"></select>
-      </div>
-      <div style="flex:1;min-width:200px;">
-        <label class="lbl">Revaluation URL</label>
-        <input id="rv_url" placeholder="https://results.vtu.ac.in/..." style="width:100%;">
-      </div>
-    </div>
-    <div class="row" style="flex-wrap:wrap;gap:10px;margin-bottom:14px;">
-      <div style="flex:1;min-width:200px;">
-        <label class="lbl">USNs (comma or newline separated)</label>
-        <textarea id="rv_usns" rows="3" placeholder="1GD23CS001&#10;1GD23CS002" style="width:100%;font-family:monospace;"></textarea>
-      </div>
-    </div>
-    <div class="row" style="gap:10px;margin-bottom:14px;">
-      <button class="btn" id="rv_fetch_btn" disabled>Fetch Revaluation &amp; Compare</button>
-      <button class="btn red" id="rv_stop_btn" disabled>Stop</button>
-      <button class="btn ghost" id="rv_export_btn" disabled>Export Comparison</button>
-    </div>
-  </div>
-
-  <!-- Progress -->
-  <div class="panel" id="rv_progress_panel" style="display:none;">
-    <h2>Fetching revaluation results...</h2>
-    <div class="progress-bar"><div class="progress-fill" id="rv_progress_fill"></div></div>
-    <div class="row" style="justify-content:space-between;margin-top:6px;">
-      <span class="preview-count" id="rv_progress_count"></span>
-      <span class="preview-count" id="rv_progress_time"></span>
-    </div>
-  </div>
-
-  <!-- Summary Cards -->
-  <div class="stat-strip" id="rv_summary_strip" style="display:none;grid-template-columns:repeat(3,1fr);">
-    <div class="stat-card" style="border-left:4px solid #D97706;">
-      <span class="k">Original Total</span>
-      <span class="v" id="rv_orig_total">--</span>
-    </div>
-    <div class="stat-card" style="border-left:4px solid #059669;">
-      <span class="k">Reval Total</span>
-      <span class="v" id="rv_new_total">--</span>
-    </div>
-    <div class="stat-card" style="border-left:4px solid #2563EB;">
-      <span class="k">Marks Change</span>
-      <span class="v" id="rv_total_change">--</span>
-    </div>
-    <div class="stat-card" style="border-left:4px solid #7C3AED;">
-      <span class="k">Improved</span>
-      <span class="v" id="rv_improved_count">--</span>
-    </div>
-    <div class="stat-card" style="border-left:4px solid #6B7280;">
-      <span class="k">No Change</span>
-      <span class="v" id="rv_nochange_count">--</span>
-    </div>
-    <div class="stat-card" style="border-left:4px solid #DC2626;">
-      <span class="k">Decreased</span>
-      <span class="v" id="rv_decreased_count">--</span>
-    </div>
-  </div>
-
-  <!-- Change Highlights -->
-  <div class="panel" id="rv_highlights_panel" style="display:none;">
-    <h2><span class="h2-ico" style="font-size:1.1rem;">&#127881;</span>Important Changes</h2>
-    <div id="rv_highlights"></div>
-  </div>
-
-  <!-- Per-Student Comparison -->
-  <div id="rv_student_cards" style="display:none;"></div>
-
-  <!-- No-data placeholder -->
-  <div class="panel" id="rv_empty" style="display:none;">
-    <p style="text-align:center;color:var(--ink-soft);padding:30px 0;">Select an original batch and provide the revaluation URL to start comparison.</p>
-  </div>
-</section>
 
 </div>
 
@@ -946,7 +906,7 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
     $("tab-" + btn.dataset.tab).classList.add("active");
     if (btn.dataset.tab === "analytics") loadBatches();
     if (btn.dataset.tab === "browse") loadBatches();
-    if (btn.dataset.tab === "revaluation") loadRevalBatches();
+    if (btn.dataset.tab === "reval") { loadBatches(); rvPopulateBatches(); }
   });
 });
 
@@ -1056,7 +1016,7 @@ function populateDbBatchSel() {
   sel.innerHTML = '<option value="">— create a new batch —</option>';
   batches.forEach(b => {
     const o = document.createElement("option");
-    o.value = b._id;
+    o.value = b.id;
     o.textContent = `${b.department || "?"} — Sem ${b.semester || "?"} — ${b.scheme || "?"} — ${b.year || "?"} (${b.student_count} students)`;
     sel.appendChild(o);
   });
@@ -1067,7 +1027,7 @@ function populateDbBatchSel() {
 
 function updateMergeUI() {
   const merging = !!$("db_batch_sel").value;
-  const b = merging ? batches.find(x => x._id === $("db_batch_sel").value) : null;
+  const b = merging ? batches.find(x => x.id === $("db_batch_sel").value) : null;
   ["db_year", "db_scheme", "db_semester", "db_department"].forEach(id => { $(id).disabled = merging; $(id).required = !merging; });
   if (b) {
     $("db_year").value = b.year || "";
@@ -1173,6 +1133,8 @@ socket.on("download-ready", () => {
   $("actions_panel").style.display = "block";
   $("download_btn").style.display = "inline-flex";
   $("save_db_btn").style.display = "inline-flex";
+  $("credits_panel").style.display = "block";
+  socket.emit("get-fetched-subjects");
   logMsg("[Info] Excel ready for download.\n");
   socket.emit("get-db-status", {}, () => {});
 });
@@ -1183,6 +1145,326 @@ socket.on("save-to-db-complete", data => {
   delete batchStudents[data.batch_id];
   if (currentBatch === data.batch_id) socket.emit("get-batch-results", { batch_id: data.batch_id });
   loadBatches();
+});
+
+/* ── Credits ──────────────────────────────────────────────── */
+let creditsData = {};
+
+socket.on("fetched-subjects", (d) => {
+  const row = $("credits_row");
+  row.innerHTML = "";
+  (d.subjects || []).forEach(code => {
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "display:flex;align-items:center;gap:4px;";
+    const lbl = document.createElement("span");
+    lbl.textContent = code;
+    lbl.style.cssText = "font-size:13px;font-weight:600;font-family:monospace;white-space:nowrap;";
+    const inp = document.createElement("input");
+    inp.type = "number"; inp.min = "0"; inp.max = "10"; inp.step = "0.5"; inp.value = "";
+    inp.className = "credit-input"; inp.dataset.code = code;
+    inp.style.cssText = "width:56px;padding:7px 6px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;text-align:center;background:#fff;outline:none;";
+    inp.addEventListener("focus", () => inp.style.borderColor = "#059669");
+    inp.addEventListener("blur", () => inp.style.borderColor = "#d1d5db");
+    wrap.appendChild(lbl);
+    wrap.appendChild(inp);
+    row.appendChild(wrap);
+  });
+});
+
+socket.on("fetched-subjects", () => {
+  const cs = $("credits_batch_sel");
+  cs.innerHTML = '<option value="">— select batch —</option>';
+  batches.forEach(b => {
+    const o = document.createElement("option");
+    o.value = b.id;
+    o.textContent = (b.department || "?") + " Sem " + (b.semester || "?") + " (" + (b.student_count || 0) + ")";
+    cs.appendChild(o);
+  });
+});
+
+$("credits_save_btn").addEventListener("click", () => {
+  document.querySelectorAll(".credit-input").forEach(inp => {
+    const v = parseFloat(inp.value);
+    if (!isNaN(v) && v > 0) creditsData[inp.dataset.code] = v;
+  });
+  const target = $("credits_batch_sel").value;
+  if (!target) { toast("Select a batch first"); return; }
+  socket.emit("save-credits", { batch_id: target, credits: creditsData });
+  $("credits_save_btn").disabled = true;
+  $("credits_save_btn").textContent = "Saving...";
+});
+
+socket.on("credits-saved", (d) => {
+  $("credits_save_btn").disabled = false;
+  $("credits_save_btn").textContent = "Save Credits & SGPA";
+  if (d.ok) {
+    toast("SGPA calculated — avg: " + d.avg_sgpa);
+    $("credits_status").textContent = "Avg SGPA: " + d.avg_sgpa + " | " + d.student_count + " students";
+    delete batchStudents[d.batch_id];
+    socket.emit("get-batch-results", { batch_id: d.batch_id });
+  } else {
+    toast("Failed: " + (d.error || "unknown"));
+  }
+});
+
+/* ── Revaluation ──────────────────────────────────────────── */
+let rvLog = [];
+
+function rvLogMsg(msg) {
+  rvLog.push(msg);
+  $("rv_log").textContent = rvLog.join("\n");
+  $("rv_log").scrollTop = $("rv_log").scrollHeight;
+}
+
+function rvPopulateBatches() {
+  const sel = $("rv_batch_sel");
+  sel.innerHTML = '<option value="">— select batch —</option>';
+  batches.forEach(b => {
+    const o = document.createElement("option");
+    o.value = b.id;
+    o.textContent = (b.department || "?") + " Sem " + (b.semester || "?") + " " + (b.scheme || "") + " (" + (b.student_count || 0) + ")";
+    sel.appendChild(o);
+  });
+}
+
+$("rv_start_btn").addEventListener("click", () => {
+  const url = $("rv_url").value.trim();
+  const batchId = $("rv_batch_sel").value;
+  const raw = $("rv_usns").value.trim();
+  if (!url) { toast("Enter VTU URL"); return; }
+  if (!batchId) { toast("Select a batch"); return; }
+  if (!raw) { toast("Enter USNs"); return; }
+  const usns = raw.replace(/,/g, "\n").split("\n").map(u => u.trim().toUpperCase()).filter(u => u.length === 10);
+  if (!usns.length) { toast("No valid USNs found"); return; }
+  rvLog = [];
+  rvLogMsg("Starting reval fetch for " + usns.length + " USN(s)...\n");
+  $("rv_start_btn").disabled = true;
+  $("rv_stop_btn").style.display = "inline-flex";
+  $("rv_actions").style.display = "none";
+  socket.emit("start-reval-fetch", { url: url, batch_id: batchId, usns: usns });
+});
+
+$("rv_stop_btn").addEventListener("click", () => {
+  socket.emit("stop-fetch");
+  $("rv_start_btn").disabled = false;
+  $("rv_stop_btn").style.display = "none";
+});
+
+socket.on("log-message", (d) => {
+  if ($("tab-reval").classList.contains("active")) rvLogMsg(d.data);
+});
+
+socket.on("reval-fetch-complete", (d) => {
+  $("rv_start_btn").disabled = false;
+  $("rv_stop_btn").style.display = "none";
+  if (d && d.success > 0) {
+    $("rv_actions").style.display = "block";
+    rvLogMsg("\n--- Reval Fetch Complete ---\n" + d.success + " USN(s) fetched.\n");
+  }
+});
+
+$("rv_compare_btn").addEventListener("click", () => {
+  const usn = $("rv_compare_usn").value.trim().toUpperCase();
+  if (!usn || usn.length !== 10) { toast("Enter valid 10-char USN"); return; }
+  const batchId = $("rv_batch_sel").value;
+  if (!batchId) { toast("Select a batch first"); return; }
+  socket.emit("compare-reval", { usn: usn, batch_id: batchId });
+  $("rv_compare_btn").disabled = true;
+  $("rv_compare_btn").textContent = "Loading...";
+});
+
+socket.on("reval-compare", (d) => {
+  $("rv_compare_btn").disabled = false;
+  $("rv_compare_btn").textContent = "Compare";
+  if (d.error) { toast(d.error); return; }
+  renderRevalCompare(d);
+});
+
+function renderRevalCompare(data) {
+  const area = $("rv_compare_area");
+  area.style.display = "block";
+  const oldS = data.old_student || {};
+  const newS = data.new_student || {};
+  const oldSubs = oldS.subjects || [];
+  const newSubs = newS.subjects || [];
+
+  const newMap = {};
+  newSubs.forEach(s => newMap[s.code] = s);
+
+  let html = '';
+
+  /* ── Header bar ── */
+  html += '<div style="background:linear-gradient(135deg,#1C7A5E 0%,#123D2E 100%);border-radius:16px 16px 0 0;padding:20px 24px;color:#fff;">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">';
+  html += '<div>';
+  html += '<div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;opacity:.75;margin-bottom:4px;">Revaluation Result Comparison</div>';
+  html += '<div style="font-size:18px;font-weight:800;">' + (newS.usn || "—") + '</div>';
+  html += '<div style="font-size:13px;opacity:.85;margin-top:2px;">' + (newS.name || oldS.name || "") + '</div>';
+  html += '</div>';
+  /* Summary badges */
+  let rvCount = 0, improvedCount = 0, noChange = 0;
+  newSubs.forEach(s => {
+    if (s.is_revaluated) {
+      rvCount++;
+      const ot = s.original_total, ft = s.final_total;
+      if (ot != null && ft != null && ft > ot) improvedCount++;
+      else noChange++;
+    }
+  });
+  html += '<div style="display:flex;gap:8px;">';
+  html += '<div style="background:rgba(255,255,255,.15);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:10px 16px;text-align:center;">';
+  html += '<div style="font-size:22px;font-weight:800;">' + rvCount + '</div>';
+  html += '<div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;opacity:.8;">Reval\'d</div>';
+  html += '</div>';
+  html += '<div style="background:rgba(46,204,145,.25);backdrop-filter:blur(4px);border:1px solid rgba(46,204,145,.35);border-radius:10px;padding:10px 16px;text-align:center;">';
+  html += '<div style="font-size:22px;font-weight:800;color:#D1FAE5;">' + improvedCount + '</div>';
+  html += '<div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#D1FAE5;">Improved</div>';
+  html += '</div>';
+  html += '</div>';
+  html += '</div></div>';
+
+  /* ── Two-column cards ── */
+  html += '<div style="background:#fff;border-radius:0 0 16px 16px;border:1px solid #E5EAE6;border-top:none;padding:20px 24px;">';
+  html += '<div style="display:flex;gap:20px;flex-wrap:wrap;">';
+
+  /* ── OLD card ── */
+  html += '<div style="flex:1;min-width:300px;">';
+  html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">';
+  html += '<div style="width:8px;height:8px;border-radius:50%;background:#9CA3AF;"></div>';
+  html += '<div style="font-size:12px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.08em;">Previous Result</div>';
+  html += '</div>';
+  html += '<div style="background:#F9FAFB;border-radius:12px;border:1px solid #E5E7EB;overflow:hidden;">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  html += '<thead><tr style="background:#F3F4F6;">';
+  html += '<th style="padding:10px 12px;text-align:left;font-weight:700;color:#374151;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Code</th>';
+  html += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#374151;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">INT</th>';
+  html += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#374151;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">EXT</th>';
+  html += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#374151;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">TOTAL</th>';
+  html += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#374151;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">RES</th>';
+  html += '</tr></thead><tbody>';
+  oldSubs.forEach(s => {
+    const hasReval = !!newMap[s.code];
+    const isF = (s.result || "").toUpperCase() === "F";
+    const rowStyle = hasReval ? "background:#ECFDF5;" : "";
+    html += '<tr style="border-bottom:1px solid #F3F4F6;' + rowStyle + '">';
+    html += '<td style="padding:9px 12px;font-weight:600;font-family:\'SF Mono\',Consolas,monospace;font-size:11.5px;color:#1F2937;">' + s.code;
+    if (hasReval) html += ' <span style="display:inline-block;background:#D1FAE5;color:#065F46;font-size:9px;padding:2px 6px;border-radius:4px;font-weight:700;margin-left:4px;vertical-align:middle;">RV</span>';
+    html += '</td>';
+    html += '<td style="padding:9px 12px;text-align:center;color:#4B5563;">' + (s.internal != null ? s.internal : "—") + '</td>';
+    html += '<td style="padding:9px 12px;text-align:center;color:#4B5563;">' + (s.external != null ? s.external : "—") + '</td>';
+    html += '<td style="padding:9px 12px;text-align:center;font-weight:700;color:#111827;">' + (s.total != null ? s.total : "—") + '</td>';
+    html += '<td style="padding:9px 12px;text-align:center;"><span style="font-weight:700;color:' + (isF ? '#DC2626' : '#059669') + ';">' + (s.result || "—") + '</span></td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table></div></div>';
+
+  /* ── NEW (REVAL) card ── */
+  html += '<div style="flex:1;min-width:300px;">';
+  html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">';
+  html += '<div style="width:8px;height:8px;border-radius:50%;background:#10B981;"></div>';
+  html += '<div style="font-size:12px;font-weight:700;color:#059669;text-transform:uppercase;letter-spacing:.08em;">Revaluation Result</div>';
+  html += '</div>';
+  html += '<div style="background:linear-gradient(180deg,#ECFDF5 0%,#FFFFFF 40%);border-radius:12px;border:1px solid #A7F3D0;overflow:hidden;">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  html += '<thead><tr style="background:linear-gradient(135deg,#10B981 0%,#059669 100%);">';
+  html += '<th style="padding:10px 12px;text-align:left;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Code</th>';
+  html += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">INT</th>';
+  html += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">OLD EXT</th>';
+  html += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">NEW EXT</th>';
+  html += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">TOTAL</th>';
+  html += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">GRADE</th>';
+  html += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">RES</th>';
+  html += '</tr></thead><tbody>';
+  newSubs.forEach(s => {
+    const isRv = s.is_revaluated === true;
+    const rvM = s.rv_marks;
+    const finalM = s.final_total != null ? s.final_total : s.total;
+    const finalR = (s.final_result && s.final_result !== "nan" && s.final_result !== "") ? s.final_result : (s.result || "");
+    const finalG = s.final_grade || "";
+    const origExt = s.original_external != null ? s.original_external : s.external;
+    const origTot = s.original_total != null ? s.original_total : s.total;
+    const origRes = s.original_result || s.result || "";
+    const origGrd = s.original_grade || "";
+    const improved = isRv && origTot != null && finalM != null && finalM > origTot;
+    const deteriorated = isRv && origTot != null && finalM != null && finalM < origTot;
+    let rowBg = "";
+    if (improved) rowBg = "background:linear-gradient(90deg,#ECFDF5 0%,#D1FAE5 100%);";
+    else if (deteriorated) rowBg = "background:#FEF2F2;";
+    else if (isRv) rowBg = "background:#F0FDF4;";
+
+    html += '<tr style="border-bottom:1px solid #E5E7EB;' + rowBg + '">';
+    html += '<td style="padding:9px 12px;font-weight:600;font-family:\'SF Mono\',Consolas,monospace;font-size:11.5px;color:#1F2937;">' + s.code;
+    if (isRv) html += ' <span style="display:inline-block;background:linear-gradient(135deg,#10B981,#059669);color:#fff;font-size:9px;padding:2px 8px;border-radius:4px;font-weight:700;margin-left:4px;vertical-align:middle;box-shadow:0 1px 3px rgba(5,150,105,.3);">RV</span>';
+    html += '</td>';
+    html += '<td style="padding:9px 12px;text-align:center;color:#4B5563;">' + (s.internal != null ? s.internal : "—") + '</td>';
+    if (isRv && rvM != null) {
+      /* Old EXT with strikethrough + new RV mark */
+      html += '<td style="padding:9px 12px;text-align:center;"><span style="text-decoration:line-through;color:#9CA3AF;font-size:11px;">' + (origExt != null ? origExt : "—") + '</span></td>';
+      html += '<td style="padding:9px 12px;text-align:center;"><span style="font-weight:800;color:#059669;font-size:13px;">' + rvM + '</span>';
+      if (improved) html += ' <span style="color:#059669;font-size:9px;margin-left:2px;">▲</span>';
+      else if (deteriorated) html += ' <span style="color:#DC2626;font-size:9px;margin-left:2px;">▼</span>';
+      html += '</td>';
+      /* Total: old crossed + new computed */
+      html += '<td style="padding:9px 12px;text-align:center;"><span style="text-decoration:line-through;color:#9CA3AF;font-size:11px;">' + (origTot != null ? origTot : "—") + '</span> <span style="font-weight:800;color:#111827;font-size:13px;">' + (finalM != null ? finalM : "—") + '</span></td>';
+      /* Grade */
+      if (improved) {
+        html += '<td style="padding:9px 12px;text-align:center;"><span style="text-decoration:line-through;color:#9CA3AF;font-size:11px;">' + origGrd + '</span> <span style="display:inline-block;background:#059669;color:#fff;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700;">' + finalG + '</span></td>';
+      } else {
+        html += '<td style="padding:9px 12px;text-align:center;"><span style="text-decoration:line-through;color:#9CA3AF;font-size:11px;">' + origGrd + '</span> <span style="font-weight:700;color:#059669;">' + finalG + '</span></td>';
+      }
+      /* Result */
+      const isPass = finalR.toUpperCase() === "P";
+      html += '<td style="padding:9px 12px;text-align:center;"><span style="display:inline-block;padding:3px 10px;border-radius:6px;font-weight:700;font-size:11px;background:' + (isPass ? '#D1FAE5;color:#065F46' : '#FEE2E2;color:#991B1B') + ';">' + finalR + '</span></td>';
+    } else {
+      /* Non-reval'd — simple row */
+      html += '<td style="padding:9px 12px;text-align:center;color:#6B7280;">' + (s.external != null ? s.external : "—") + '</td>';
+      html += '<td style="padding:9px 12px;text-align:center;color:#6B7280;">—</td>';
+      html += '<td style="padding:9px 12px;text-align:center;font-weight:700;color:#374151;">' + (s.total != null ? s.total : "—") + '</td>';
+      const g = s.grade || "";
+      html += '<td style="padding:9px 12px;text-align:center;color:#6B7280;">' + g + '</td>';
+      const isF2 = (s.result || "").toUpperCase() === "F";
+      html += '<td style="padding:9px 12px;text-align:center;"><span style="display:inline-block;padding:3px 10px;border-radius:6px;font-weight:700;font-size:11px;background:' + (isF2 ? '#FEE2E2;color:#991B1B' : '#D1FAE5;color:#065F46') + ';">' + (s.result || "—") + '</span></td>';
+    }
+    html += '</tr>';
+  });
+  html += '</tbody></table></div></div>';
+
+  html += '</div>'; /* flex gap */
+
+  /* ── Update & Store bar ── */
+  html += '<div style="margin-top:16px;padding-top:16px;border-top:1px solid #E5E7EB;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">';
+  html += '<label style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.06em;">Store in:</label>';
+  html += '<select id="rv_update_batch" style="padding:9px 14px;border:1px solid #D1D5DB;border-radius:10px;font-size:13px;background:#fff;color:#1F2937;outline:none;transition:border-color .2s;">';
+  html += '<option value="">— select batch —</option>';
+  batches.forEach(b => {
+    html += '<option value="' + b.id + '">' + (b.department || "?") + " Sem " + (b.semester || "?") + " " + (b.scheme || "") + " (" + (b.student_count || 0) + ')</option>';
+  });
+  html += '</select>';
+  html += '<button class="btn" onclick="rvUpdateStore(\'' + (data.usn || "") + '\')" style="background:linear-gradient(135deg,#10B981,#059669);color:#fff;border:none;padding:9px 20px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(5,150,105,.3);transition:transform .15s,box-shadow .15s;" onmouseover="this.style.transform=\'translateY(-1px)\';this.style.boxShadow=\'0 4px 12px rgba(5,150,105,.4)\'" onmouseout="this.style.transform=\'\';this.style.boxShadow=\'0 2px 8px rgba(5,150,105,.3)\'">Update & Store</button>';
+  html += '</div>';
+
+  html += '</div>'; /* white card */
+
+  area.innerHTML = html;
+}
+
+function rvUpdateStore(usn) {
+  const batchEl = $("rv_update_batch");
+  const batchId = batchEl ? batchEl.value : $("rv_batch_sel").value;
+  if (!batchId) { toast("Select a batch to store in"); return; }
+  if (!confirm("Replace old result for " + usn + " with revaluation result?")) return;
+  socket.emit("update-reval-result", { usn: usn, batch_id: batchId });
+}
+
+socket.on("reval-updated", (d) => {
+  if (d.ok) {
+    toast("Result updated for " + d.usn);
+    $("rv_compare_area").style.display = "none";
+    $("rv_compare_usn").value = "";
+    delete batchStudents[d.batch_id];
+  } else {
+    toast("Update failed: " + (d.error || "unknown"));
+  }
 });
 
 /* ---------------- analytics & browse data ---------------- */
@@ -1202,13 +1484,13 @@ socket.on("batches", data => {
   sel.innerHTML = '<option value="">— select a saved batch —</option>';
   batches.forEach(b => {
     const o = document.createElement("option");
-    o.value = b._id;
+    o.value = b.id;
     o.textContent = `${b.department || "?"} — Sem ${b.semester || "?"} — ${b.scheme || "?"} — ${b.year || "?"} (${b.student_count} students)`;
     sel.appendChild(o);
   });
   $("an_empty").style.display = batches.length ? "none" : "block";
   if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
-  if (currentBatch && batches.some(b => b._id === currentBatch)) {
+  if (currentBatch && batches.some(b => b.id === currentBatch)) {
     delete batchStudents[currentBatch];
     socket.emit("get-batch-results", { batch_id: currentBatch });
   } else if (currentBatch) {
@@ -1219,23 +1501,50 @@ socket.on("batches", data => {
   populateFilters();
   applyBrowseFilters();
   populateDbBatchSel();
+  rvPopulateBatches();
 
   /* Fetch student data for ALL batches so Browse tab shows data */
   batches.forEach(b => {
-    if (!batchStudents[b._id]) {
-      socket.emit("get-batch-results", { batch_id: b._id });
+    if (!batchStudents[b.id]) {
+      socket.emit("get-batch-results", { batch_id: b.id });
     }
   });
 });
 
 $("an_batch_sel").addEventListener("change", e => {
-  if (!e.target.value) { $("an_content").style.display = "none"; return; }
+  if (!e.target.value) {
+    $("an_content").style.display = "none";
+    $("an_delete_btn").style.display = "none";
+    return;
+  }
   currentBatch = e.target.value;
+  $("an_delete_btn").style.display = "";
   if (batchStudents[currentBatch]) {
-    const b = batches.find(x => x._id === currentBatch);
+    const b = batches.find(x => x.id === currentBatch);
     if (b) renderAnalytics(b, batchStudents[currentBatch]);
   } else {
     socket.emit("get-batch-results", { batch_id: currentBatch });
+  }
+});
+
+$("an_delete_btn").addEventListener("click", () => {
+  if (!currentBatch) return;
+  const b = batches.find(x => x.id === currentBatch);
+  const label = b ? `${b.department} Sem ${b.semester} (${b.student_count} students)` : currentBatch;
+  if (!confirm("Delete batch?\n\n" + label + "\n\nThis cannot be undone.")) return;
+  socket.emit("delete-batch", { batch_id: currentBatch });
+});
+
+socket.on("batch-deleted", (d) => {
+  if (d.ok) {
+    toast("Batch deleted");
+    delete batchStudents[d.batch_id];
+    currentBatch = null;
+    $("an_content").style.display = "none";
+    $("an_delete_btn").style.display = "none";
+    loadBatches();
+  } else {
+    toast("Delete failed: " + (d.error || "unknown"));
   }
 });
 
@@ -1247,8 +1556,8 @@ $("an_refresh_btn").addEventListener("click", () => {
 
 socket.on("batch-results", data => {
   if (data.error || !data.batch) { toast(data.error || "Batch not found"); return; }
-  batchStudents[data.batch._id] = data.students;
-  if (currentBatch === data.batch._id) renderAnalytics(data.batch, data.students);
+  batchStudents[data.batch.id] = data.students;
+  if (currentBatch === data.batch.id) renderAnalytics(data.batch, data.students);
   applyBrowseFilters();
 });
 
@@ -1267,9 +1576,13 @@ function gradePoint(total) {
 }
 
 /* SGPA from total marks using VTU grade points.
-   Credits are not scraped, so subjects are weighted equally. */
+   Uses reval'd grade if available, falls back to computed grade. */
 function studentSGPA(s) {
-  const pts = (s.subjects || []).map(sub => gradePoint(sub.total)).filter(v => v !== null);
+  if (s.sgpa != null) return s.sgpa;
+  const pts = (s.subjects || []).map(sub => {
+    if (sub.is_revaluated && sub.final_grade) return gradePoint(sub.final_total != null ? sub.final_total : sub.total);
+    return gradePoint(sub.total);
+  }).filter(v => v !== null);
   if (!pts.length) return null;
   return pts.reduce((a, b) => a + b, 0) / pts.length;
 }
@@ -1308,7 +1621,7 @@ function renderAnalytics(batch, students) {
 
   const subjMap = {};
   students.forEach(s => (s.subjects || []).forEach(sub => {
-    const t = sub.total;
+    const t = (sub.is_revaluated && sub.final_total != null) ? sub.final_total : sub.total;
     if (typeof t !== "number" && t === null) return;
     if (!subjMap[sub.code]) subjMap[sub.code] = [];
     subjMap[sub.code].push(Number(t) || 0);
@@ -1346,7 +1659,11 @@ function renderAnalytics(batch, students) {
   /* ---- Failed Students ---- */
   const failedStudents = [];
   students.forEach(s => {
-    const fails = (s.subjects || []).filter(sub => sub.result === "F" || (sub.total !== null && sub.total !== undefined && sub.total < 40));
+    const fails = (s.subjects || []).filter(sub => {
+      const r = (sub.is_revaluated && sub.final_result) ? sub.final_result : sub.result;
+      const t = (sub.is_revaluated && sub.final_total != null) ? sub.final_total : sub.total;
+      return r === "F" || (t !== null && t !== undefined && t < 40);
+    });
     if (fails.length) {
       failedStudents.push({ usn: s.usn, name: s.name || "", percentage: s.percentage, fails, result_status: s.result_status });
     }
@@ -1449,14 +1766,14 @@ function matchingBatches() {
 
 function applyBrowseFilters() {
   const match = matchingBatches();
-  const need = match.filter(b => !batchStudents[b._id]);
-  need.forEach(b => socket.emit("get-batch-results", { batch_id: b._id }));
+  const need = match.filter(b => !batchStudents[b.id]);
+  need.forEach(b => socket.emit("get-batch-results", { batch_id: b.id }));
   if (match.length) $("export_btn").disabled = false;
   else $("export_btn").disabled = true;
 
   browseRows = [];
   match.forEach(b => {
-    (batchStudents[b._id] || []).forEach(s => browseRows.push({ batchId: b._id, ...s }));
+    (batchStudents[b.id] || []).forEach(s => browseRows.push({ batchId: b.id, ...s }));
   });
   renderBrowseTable();
 }
@@ -1464,7 +1781,7 @@ function applyBrowseFilters() {
 $("export_btn").addEventListener("click", () => {
   const match = matchingBatches();
   if (!match.length) { toast("Nothing to export"); return; }
-  window.location.href = "/export-batch/" + match[0]._id;
+  window.location.href = "/export-batch/" + match[0].id;
 });
 
 /* VTU grade letter from total marks (mirrors the Excel generator). */
@@ -1512,16 +1829,26 @@ function renderBrowseTable() {
     html += `<tr><td>${r.usn}</td><td>${r.name || ""}</td>`;
     subjectCodes.forEach(c => {
       const s = subMap[c];
-      const int = s && s.internal !== null && s.internal !== undefined ? s.internal : "—";
-      const ext = s && s.external !== null && s.external !== undefined ? s.external : "—";
-      const tot = s && s.total !== null && s.total !== undefined ? s.total : "—";
-      const grd = s && s.total !== null && s.total !== undefined ? gradeOf(s.total) : "—";
-      const res = s && s.result ? s.result : "—";
-      let totBg = "";
-      if (s && s.total !== null && s.total !== undefined) {
-        totBg = "background:#c8e6c9;";
+      if (!s) {
+        html += `<td class='num'>—</td><td class='num'>—</td><td class='num'>—</td><td class='num'>—</td><td class='num'>—</td>`;
+        return;
       }
-      html += `<td class='num'>${int}</td><td class='num'>${ext}</td><td class='num' style='${totBg}font-weight:600'>${tot}</td><td class='num'>${grd}</td><td class='num'>${res}</td>`;
+      const isRv = s.is_revaluated === true;
+      const bestExt = isRv && s.rv_marks != null ? s.rv_marks : s.external;
+      const bestTot = isRv && s.final_total != null ? s.final_total : s.total;
+      const bestGrd = isRv && s.final_grade ? s.final_grade : (s.total != null ? gradeOf(s.total) : "—");
+      const bestRes = isRv && s.final_result ? s.final_result : (s.result || "—");
+      const int = s.internal != null ? s.internal : "—";
+      const ext = bestExt != null ? bestExt : "—";
+      const tot = bestTot != null ? bestTot : "—";
+      const grd = bestGrd || "—";
+      const res = bestRes || "—";
+      let totBg = "";
+      if (bestTot != null) {
+        totBg = isRv ? "background:#d1fae5;" : "background:#c8e6c9;";
+      }
+      const rvNote = isRv ? ' title="Revaluated"' : "";
+      html += `<td class='num'>${int}</td><td class='num'>${ext}</td><td class='num' style='${totBg}font-weight:600'>${tot}${isRv ? " *" : ""}</td><td class='num'>${grd}</td><td class='num'>${res}</td>`;
     });
     const pct = r.percentage !== null && r.percentage !== undefined ? r.percentage + "%" : "—";
     html += `<td class='num'>${pct}</td>`;
@@ -1577,7 +1904,6 @@ function doStudentSearch() {
       if (data.error) { area.innerHTML = '<div class="panel" style="text-align:center;padding:30px;"><div style="font-size:1.5rem;margin-bottom:6px;">&#10060;</div><div style="color:#DC2626;font-weight:600;">' + data.error + '</div></div>'; return; }
       renderStudentRecord(data);
       $("sr_print_btn").style.display = "";
-      saveToHistory(data);
     })
     .catch(e => { area.innerHTML = '<div class="panel" style="text-align:center;padding:30px;"><div style="color:#DC2626;font-weight:600;">Failed: ' + e.message + '</div></div>'; });
 }
@@ -1599,8 +1925,23 @@ function gradeClass(g) {
   return {"O":"sr-grade-o","A+":"sr-grade-aplus","A":"sr-grade-a","B+":"sr-grade-bplus","B":"sr-grade-b","C":"sr-grade-c","P":"sr-grade-p","F":"sr-grade-f"}[g]||"";
 }
 function calcSGPA(subjects) {
+  const withCredits = subjects.some(s => s.credit != null && s.credit > 0);
+  if (withCredits) {
+    let tc=0,tp=0;
+    subjects.forEach(s=>{
+      const isRv=s.is_revaluated&&s.final_grade;
+      const g=isRv?s.final_grade:gradeOf(s.total);
+      const gp=GRADE_POINTS[g];if(gp===undefined)return;if(s.credit==null)return;
+      tc+=s.credit;tp+=gp*s.credit;
+    });
+    return tc>0?(tp/tc).toFixed(2):"—";
+  }
   let tc=0,tp=0;
-  subjects.forEach(s=>{if(s.result==="F")return;const g=gradeOf(s.total);const gp=GRADE_POINTS[g];if(gp===undefined)return;tc+=4;tp+=gp*4;});
+  subjects.forEach(s=>{
+    const isRv=s.is_revaluated&&s.final_grade;
+    const g=isRv?s.final_grade:gradeOf(s.total);
+    const gp=GRADE_POINTS[g];if(gp===undefined)return;tc+=4;tp+=gp*4;
+  });
   return tc>0?(tp/tc).toFixed(2):"—";
 }
 function semNum(s){try{return parseInt(String(s).replace(/\D/g,""))||0;}catch(e){return 0;}}
@@ -1614,27 +1955,19 @@ function renderStudentRecord(data, container) {
     return;
   }
 
-  /* Group by semester number: { 1: { original: {...}, revaluation: {...} } } */
-  const semGroups = {};
-  sems.forEach(s => {
-    const num = semNum(s.semester);
-    if (!semGroups[num]) semGroups[num] = {};
-    const rtype = s.result_type || "original";
-    semGroups[num][rtype] = s;
-  });
+  const maxSem = Math.max(...sems.map(s => semNum(s.semester)), 8);
 
-  const semNums = Object.keys(semGroups).map(Number).sort((a,b) => a - b);
-  const maxSem = Math.max(...semNums, 8);
-
-  /* SGPA calc — use reval if available, else original */
   const semSGPAs = {};
   let totalBacklogs = 0;
-  semNums.forEach(num => {
-    const grp = semGroups[num];
-    const s = grp.revaluation || grp.original;
+
+  sems.forEach(s => {
+    const num = semNum(s.semester);
     const sgpa = calcSGPA(s.subjects || []);
     semSGPAs[num] = sgpa;
-    totalBacklogs += (s.subjects || []).filter(sub => sub.result === "F").length;
+    totalBacklogs += (s.subjects || []).filter(sub => {
+      const r = (sub.is_revaluated && sub.final_result) ? sub.final_result : sub.result;
+      return r === "F";
+    }).length;
   });
 
   const sgpas = Object.values(semSGPAs).filter(v => v !== "—").map(Number);
@@ -1650,7 +1983,7 @@ function renderStudentRecord(data, container) {
     </div>
     <div class="sr-header-right">
       <div class="sr-usn-pill">${data.usn}</div>
-      <div class="sr-sem-count">${semNums.length} semester result(s)</div>
+      <div class="sr-sem-count">${sems.length} semester result(s)</div>
     </div>
   </div>`;
 
@@ -1664,97 +1997,61 @@ function renderStudentRecord(data, container) {
   html += `<div class="sr-sem-cell sr-backlogs"><div class="sr-sem-label">Backlogs</div><div class="sr-sem-val">${totalBacklogs}</div></div>`;
   html += '</div>';
 
-  /* SEMESTER CARDS — each semester result shown separately */
-  sems.forEach((s, idx) => {
+  /* SEMESTER CARDS */
+  sems.forEach(s => {
     const num = semNum(s.semester);
-    const sgpa = calcSGPA(s.subjects || []);
+    const sgpa = semSGPAs[num] || "—";
     const subs = s.subjects || [];
-    const rtype = s.result_type || "original";
-    const isReval = rtype === "revaluation";
-    const badgeColor = isReval ? "background:#DBEAFE;color:#1E40AF;" : "background:#D1FAE5;color:#065F46;";
-    const badgeText = isReval ? "Revaluation" : "Original";
-
-    /* Check if any subject has reval data (Old Marks / RV Marks fields) */
-    const hasRevalData = subs.some(sub => sub.has_reval || sub.old_marks !== undefined);
-
-    html += `<div class="sr-sem-card" style="${isReval ? 'border:2px solid #93C5FD;' : ''}">
-      <div class="sr-sem-card-head" style="${isReval ? 'background:linear-gradient(135deg,#2563EB,#1E40AF);' : ''}">
+    html += `<div class="sr-sem-card">
+      <div class="sr-sem-card-head">
         <span class="sr-sch-label">Semester ${s.semester}</span>
-        <span style="font-size:.72rem;padding:3px 10px;border-radius:6px;font-weight:700;${badgeColor}">${badgeText}</span>
         <span class="sr-sch-year">${s.scheme || s.year || ""}</span>
         <span class="sr-sch-sgpa">SGPA ${sgpa}</span>
       </div>
       <div style="overflow-x:auto;">
       <table class="sr-subj-table">
         <thead><tr>
-          <th>#</th><th>Subject Code</th><th>Subject Name</th>`;
-    if (hasRevalData) {
-      html += `<th style="text-align:center">INT</th><th style="text-align:center">Old Marks</th><th style="text-align:center">Old Res</th>
-               <th style="text-align:center">RV Marks</th><th style="text-align:center">RV Res</th>
-               <th style="text-align:center">Final</th><th style="text-align:center">Final Res</th>`;
-    } else {
-      html += `<th style="text-align:center">INT</th><th style="text-align:center">EXT</th>
-               <th style="text-align:center">TOTAL</th><th style="text-align:center">GRADE</th>
-               <th style="text-align:center">RES</th>`;
-    }
-    html += `</tr></thead><tbody>`;
+          <th>#</th><th>Subject Code</th><th>Subject Name</th>
+          <th style="text-align:center">INT</th><th style="text-align:center">EXT</th>
+          <th style="text-align:center">TOTAL</th><th style="text-align:center">GRADE</th>
+          <th style="text-align:center">RES</th>
+        </tr></thead>
+        <tbody>`;
     subs.forEach((sub, idx2) => {
-      if (sub.has_reval || sub.old_marks !== undefined) {
-        /* Revaluation row — show Old / RV / Final columns */
-        const oldG = gradeOf(sub.old_marks);
-        const oldR = sub.old_result || "—";
-        const rvG = gradeOf(sub.rv_marks);
-        const rvR = sub.rv_result || "—";
-        const finalG = gradeOf(sub.final_marks);
-        const finalR = sub.final_result || "—";
-        html += `<tr>
-          <td>${idx2 + 1}</td>
-          <td style="font-family:monospace;font-weight:600;">${sub.code}</td>
-          <td>${sub.subject_name || ""}</td>
-          <td class="sr-marks">${sub.internal != null ? sub.internal : "—"}</td>
-          <td class="sr-marks">${sub.old_marks != null ? sub.old_marks : (sub.external != null ? sub.external : "—")}</td>
-          <td style="text-align:center"><span class="${oldR === 'P' ? 'sr-pill-pass' : 'sr-pill-fail'}">${oldR}</span></td>
-          <td class="sr-marks" style="font-weight:700;color:#2563EB;">${sub.rv_marks != null ? sub.rv_marks : "—"}</td>
-          <td style="text-align:center"><span class="${rvR === 'P' ? 'sr-pill-pass' : 'sr-pill-fail'}">${rvR}</span></td>
-          <td class="sr-marks" style="font-weight:800;">${sub.final_marks != null ? sub.final_marks : "—"}</td>
-          <td style="text-align:center"><span class="${finalR === 'P' ? 'sr-pill-pass' : 'sr-pill-fail'}">${finalR}</span></td>
-        </tr>`;
+      const isRv = sub.is_revaluated === true;
+      const bestTotal = isRv && sub.final_total != null ? sub.final_total : sub.total;
+      const bestResult = isRv && sub.final_result ? sub.final_result : (sub.result || "");
+      const bestGrade = isRv && sub.final_grade ? sub.final_grade : gradeOf(bestTotal);
+      const gc = gradeClass(bestGrade);
+      const pass = bestResult !== "F";
+      const rvBadge = isRv ? ' <span style="background:#059669;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;vertical-align:middle;">RV</span>' : "";
+      const origExt = sub.original_external != null ? sub.original_external : sub.external;
+      const origTot = sub.original_total != null ? sub.original_total : sub.total;
+      let extCell, totalCell, gradeCell, resCell;
+      if (isRv && sub.rv_marks != null) {
+        extCell = `<td class="sr-marks"><span style="text-decoration:line-through;color:#9CA3AF;">${origExt != null ? origExt : "—"}</span> <span style="font-weight:700;color:#059669;">${sub.rv_marks}</span></td>`;
+        totalCell = `<td class="sr-marks" style="font-weight:800;"><span style="text-decoration:line-through;color:#9CA3AF;">${origTot != null ? origTot : "—"}</span> <span style="color:#059669;">${bestTotal != null ? bestTotal : "—"}</span></td>`;
+        gradeCell = `<td style="text-align:center"><span class="sr-grade ${gc}">${bestGrade}</span></td>`;
+        resCell = `<td style="text-align:center"><span class="${pass ? 'sr-pill-pass' : 'sr-pill-fail'}">${bestResult || "—"}</span></td>`;
       } else {
-        /* Normal row — INT / EXT / TOTAL / GRADE / RES */
-        const g = gradeOf(sub.total);
-        const gc = gradeClass(g);
-        const pass = sub.result !== "F";
-        html += `<tr>
-          <td>${idx2 + 1}</td>
-          <td style="font-family:monospace;font-weight:600;">${sub.code}</td>
-          <td>${sub.subject_name || ""}</td>
-          <td class="sr-marks">${sub.internal != null ? sub.internal : "—"}</td>
-          <td class="sr-marks">${sub.external != null ? sub.external : "—"}</td>
-          <td class="sr-marks" style="font-weight:800;">${sub.total != null ? sub.total : "—"}</td>
-          <td style="text-align:center"><span class="sr-grade ${gc}">${g}</span></td>
-          <td style="text-align:center"><span class="${pass ? 'sr-pill-pass' : 'sr-pill-fail'}">${sub.result || "—"}</span></td>
-        </tr>`;
+        extCell = `<td class="sr-marks">${sub.external != null ? sub.external : "—"}</td>`;
+        totalCell = `<td class="sr-marks" style="font-weight:800;">${bestTotal != null ? bestTotal : "—"}</td>`;
+        gradeCell = `<td style="text-align:center"><span class="sr-grade ${gc}">${bestGrade}</span></td>`;
+        resCell = `<td style="text-align:center"><span class="${pass ? 'sr-pill-pass' : 'sr-pill-fail'}">${bestResult || "—"}</span></td>`;
       }
+      html += `<tr>
+        <td>${idx2 + 1}</td>
+        <td style="font-family:monospace;font-weight:600;">${sub.code}${rvBadge}</td>
+        <td>${sub.subject_name || ""}</td>
+        <td class="sr-marks">${sub.internal != null ? sub.internal : "—"}</td>
+        ${extCell}
+        ${totalCell}
+        ${gradeCell}
+        ${resCell}
+      </tr>`;
     });
     html += '</tbody></table></div></div>';
   });
-
-  /* LOCAL HISTORY */
-  const history = getHistory(data.usn);
-  if (history.length > 1) {
-    html += '<div style="margin-top:20px;"><h3 style="font-size:.9rem;color:#374151;margin-bottom:10px;">Result History</h3>';
-    history.forEach((h, i) => {
-      const dt = h.fetched_at ? new Date(h.fetched_at).toLocaleString() : "Unknown";
-      const sgpas_h = h.sgpas || [];
-      const cgpa_h = sgpas_h.length ? (sgpas_h.reduce((a,b)=>a+b,0)/sgpas_h.length).toFixed(2) : "—";
-      html += `<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px 16px;margin-bottom:8px;font-size:.82rem;">
-        <strong>${h.label || "Result " + (i+1)}</strong> — ${dt}
-        <span style="margin-left:12px;color:#6B7280;">Semesters: ${h.sem_count || 0}</span>
-        <span style="margin-left:12px;color:#059669;font-weight:700;">CGPA: ${cgpa_h}</span>
-      </div>`;
-    });
-    html += '</div>';
-  }
 
   body.innerHTML = html;
 }
@@ -1764,238 +2061,7 @@ function ordinal(n) {
   return s[n] || n + "TH";
 }
 
-/* Local Storage History */
-function getHistory(usn) {
-  try {
-    const raw = localStorage.getItem("sr_history_" + usn);
-    return raw ? JSON.parse(raw) : [];
-  } catch(e) { return []; }
-}
 
-function saveToHistory(data) {
-  try {
-    const usn = data.usn;
-    const history = getHistory(usn);
-    const sgpas = (data.semesters || []).map(s => {
-      const v = calcSGPA(s.subjects || []);
-      return v !== "—" ? parseFloat(v) : null;
-    }).filter(v => v !== null);
-
-    const entry = {
-      label: "Fetched Result",
-      fetched_at: new Date().toISOString(),
-      sem_count: (data.semesters || []).length,
-      sgpas: sgpas,
-      data: data,
-    };
-
-    const exists = history.some(h => JSON.stringify(h.data) === JSON.stringify(data));
-    if (!exists) {
-      history.push(entry);
-      if (history.length > 10) history.shift();
-      localStorage.setItem("sr_history_" + usn, JSON.stringify(history));
-    }
-  } catch(e) {}
-}
-
-/* ================================================================
-   REVALUATION TAB
-   ================================================================ */
-let rvComparisonData = [];
-
-function loadRevalBatches() {
-  socket.emit("get-batches");
-}
-
-socket.on("batches", (d) => {
-  if (d.error) return;
-  const sel = $("rv_batch_sel");
-  if (!sel) return;
-  const batches = (d.batches || []).filter(b => (b.result_type || "original") === "original");
-  sel.innerHTML = '<option value="">-- select original batch --</option>' +
-    batches.map(b => {
-      const label = `${b.year} / ${b.scheme} / Sem ${b.semester} / ${b.department} (${b.student_count || 0} students)`;
-      return `<option value="${b._id}">${label}</option>`;
-    }).join("");
-  sel.onchange = () => {
-    $("rv_fetch_btn").disabled = !sel.value;
-  };
-});
-
-$("rv_fetch_btn").addEventListener("click", () => {
-  const batchId = $("rv_batch_sel").value;
-  const url = $("rv_url").value.trim();
-  const raw = $("rv_usns").value;
-  if (!batchId || !url || !raw) { alert("Select batch, enter URL and USNs."); return; }
-
-  const usns = raw.replace(/,/g, "\n").split("\n").map(s => s.trim().toUpperCase()).filter(x => /^[A-Z0-9]{10}$/.test(x));
-  if (!usns.length) { alert("No valid USNs found."); return; }
-
-  $("rv_fetch_btn").disabled = true;
-  $("rv_stop_btn").disabled = false;
-  $("rv_progress_panel").style.display = "";
-  $("rv_summary_strip").style.display = "none";
-  $("rv_highlights_panel").style.display = "none";
-  $("rv_student_cards").style.display = "none";
-  $("rv_empty").style.display = "none";
-  $("rv_progress_fill").style.width = "0%";
-  $("rv_progress_count").textContent = `0 / ${usns.length}`;
-
-  socket.emit("start-reval-fetch", {
-    original_batch_id: batchId,
-    usns: usns,
-    url: url,
-  });
-});
-
-socket.on("reval-fetch-started", (d) => {
-  $("rv_progress_count").textContent = `0 / ${d.total}`;
-});
-
-socket.on("fetch-progress", (d) => {
-  const total = d.total || 1;
-  const pct = Math.round(((d.success + d.fail) / total) * 100);
-  $("rv_progress_fill").style.width = pct + "%";
-  $("rv_progress_count").textContent = `${d.success + d.fail} / ${total}`;
-});
-
-socket.on("fetch-complete", (d) => {
-  $("rv_stop_btn").disabled = true;
-  $("rv_fetch_btn").disabled = false;
-});
-
-socket.on("reval-comparison-ready", (d) => {
-  $("rv_progress_panel").style.display = "none";
-  rvComparisonData = d.comparison || [];
-  renderRevalComparison(d.original_batch_id, d.reval_batch_id);
-});
-
-function renderRevalComparison(origBatchId, revalBatchId) {
-  if (!rvComparisonData.length) {
-    $("rv_empty").style.display = "";
-    $("rv_summary_strip").style.display = "none";
-    $("rv_highlights_panel").style.display = "none";
-    $("rv_student_cards").style.display = "none";
-    return;
-  }
-
-  // Aggregate summary across all students
-  let totalImproved = 0, totalDecreased = 0, totalNoChange = 0;
-  let totalOrig = 0, totalNew = 0;
-  const highlights = [];
-
-  rvComparisonData.forEach(s => {
-    const sm = s.summary;
-    totalImproved += sm.improved || 0;
-    totalDecreased += sm.decreased || 0;
-    totalNoChange += sm.no_change || 0;
-    totalOrig += sm.orig_total || 0;
-    totalNew += sm.new_total || 0;
-
-    (s.comparison || []).forEach(c => {
-      if (c.status === "Improved" || c.result_changed === "New Pass") {
-        highlights.push({
-          usn: s.usn,
-          name: s.name,
-          code: c.code,
-          subject_name: c.subject_name,
-          orig_total: c.orig_total,
-          new_total: c.new_total,
-          change: c.change,
-          orig_result: c.orig_result,
-          new_result: c.new_result,
-          result_changed: c.result_changed,
-        });
-      }
-    });
-  });
-
-  // Show summary cards
-  $("rv_summary_strip").style.display = "";
-  $("rv_orig_total").textContent = totalOrig;
-  $("rv_new_total").textContent = totalNew;
-  const diff = totalNew - totalOrig;
-  $("rv_total_change").textContent = (diff >= 0 ? "+" : "") + diff;
-  $("rv_total_change").style.color = diff > 0 ? "#059669" : diff < 0 ? "#DC2626" : "#6B7280";
-  $("rv_improved_count").textContent = totalImproved;
-  $("rv_nochange_count").textContent = totalNoChange;
-  $("rv_decreased_count").textContent = totalDecreased;
-
-  // Show highlights
-  const hlPanel = $("rv_highlights_panel");
-  const hlDiv = $("rv_highlights");
-  if (highlights.length) {
-    hlPanel.style.display = "";
-    hlDiv.innerHTML = highlights.map(h => {
-      const cls = h.result_changed === "New Pass" ? "rv-hl-improved" : "rv-hl-improved";
-      const changeText = h.change > 0 ? `+${h.change}` : h.change;
-      const resultText = h.result_changed ? ` · ${h.orig_result || "?"} → ${h.new_result || "?"} (${h.result_changed})` : "";
-      return `<div class="rv-highlight-box ${cls}">
-        <strong>${h.usn}</strong> ${h.name ? "(" + h.name + ")" : ""} — ${h.subject_name || h.code}: ${h.orig_total ?? "?"} → ${h.new_total ?? "?"} (${changeText})${resultText}
-      </div>`;
-    }).join("");
-  } else {
-    hlPanel.style.display = "none";
-  }
-
-  // Per-student cards
-  const cardsDiv = $("rv_student_cards");
-  cardsDiv.style.display = "";
-  cardsDiv.innerHTML = rvComparisonData.map(s => {
-    const sm = s.summary;
-    let badgeClass = "rv-badge-nochange";
-    let badgeText = "No Change";
-    if (sm.improved > 0 && sm.total_change > 0) { badgeClass = "rv-badge-improved"; badgeText = `+${sm.total_change} Improved`; }
-    else if (sm.decreased > 0 && sm.total_change < 0) { badgeClass = "rv-badge-decreased"; badgeText = `${sm.total_change} Decreased`; }
-
-    let tableRows = (s.comparison || []).map(c => {
-      const chgCls = c.change > 0 ? "rv-chg-pos" : c.change < 0 ? "rv-chg-neg" : "rv-chg-zero";
-      const chgText = c.change > 0 ? `+${c.change}` : c.change < 0 ? `${c.change}` : "0";
-      const stCls = c.status === "Improved" ? "rv-status-improved" : c.status === "Decreased" ? "rv-status-decreased" : "rv-status-nochange";
-      const npCls = c.result_changed === "New Pass" ? " rv-status-newpass" : "";
-      const origTot = c.orig_total !== null && c.orig_total !== undefined ? c.orig_total : "—";
-      const newTot = c.new_total !== null && c.new_total !== undefined ? c.new_total : "—";
-      return `<tr>
-        <td>${c.code}</td>
-        <td style="font-family:inherit;font-weight:600;">${c.subject_name || ""}</td>
-        <td class="num">${origTot}</td>
-        <td class="num">${newTot}</td>
-        <td class="num ${chgCls}" style="font-weight:700;">${chgText}</td>
-        <td><span class="${stCls}${npCls}">${c.status}${c.result_changed ? " (" + c.result_changed + ")" : ""}</span></td>
-      </tr>`;
-    }).join("");
-
-    return `<div class="rv-student-card">
-      <div class="rv-student-header">
-        <span class="rv-usn">${s.usn}</span>
-        <span class="rv-name">${s.name || ""}</span>
-        <span class="rv-badge ${badgeClass}">${badgeText}</span>
-      </div>
-      <div class="rv-summary-row">
-        <span class="rv-sum-item rv-sum-orig">Original: ${sm.orig_total}</span>
-        <span class="rv-sum-item rv-sum-new">Reval: ${sm.new_total}</span>
-        <span class="rv-sum-item rv-sum-change">Change: ${sm.total_change >= 0 ? "+" : ""}${sm.total_change}</span>
-        <span class="rv-sum-item" style="background:#E0E7FF;color:#3730A3;">Improved: ${sm.improved}</span>
-        <span class="rv-sum-item" style="background:#F3F4F6;color:#374151;">No Change: ${sm.no_change}</span>
-      </div>
-      <div class="tbl-wrap"><table class="rv-table">
-        <thead><tr><th>Code</th><th>Subject</th><th>Before</th><th>After</th><th>Change</th><th>Status</th></tr></thead>
-        <tbody>${tableRows}</tbody>
-      </table></div>
-    </div>`;
-  }).join("");
-}
-
-socket.on("reval-comparison", (d) => {
-  if (d.error) { alert("Error: " + d.error); return; }
-  rvComparisonData = d.comparison || [];
-  renderRevalComparison();
-});
-
-$("rv_stop_btn").addEventListener("click", () => {
-  socket.emit("stop-fetch");
-  $("rv_stop_btn").disabled = true;
-});
 </script>
 </body>
 </html>
