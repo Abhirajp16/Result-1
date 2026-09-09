@@ -1507,6 +1507,9 @@ socket.on("reval-updated", (d) => {
     $("rv_compare_area").style.display = "none";
     $("rv_compare_usn").value = "";
     delete batchStudents[d.batch_id];
+    if (currentBatch === d.batch_id) {
+      socket.emit("get-batch-results", { batch_id: d.batch_id });
+    }
   } else {
     toast("Update failed: " + (d.error || "unknown"));
   }
