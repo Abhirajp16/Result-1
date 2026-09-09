@@ -174,7 +174,7 @@ def scrape(html):
         if len(c) < 6:
             continue
         code = c[0].text.strip()
-        if "Subject Code" in code or not re.match(r"^[A-Za-z0-9]{2,8}$", code):
+        if "Subject Code" in code or not re.match(r"^[A-Za-z0-9]{2,12}$", code):
             continue
 
         if is_reval:

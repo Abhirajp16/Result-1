@@ -509,9 +509,14 @@ def update_student_result_reval(batch_id, usn, name, new_subjects, result_status
                     merged["original_grade"] = old_subj.get("original_grade") or old_subj.get("grade")
                 merged["is_revaluated"] = True
             else:
-                # Non-reval'd subject: keep old DB values exactly
+                # Non-reval'd: use new subject data (is_revaluated=False) but preserve DB-specific fields
                 if old_subj:
-                    merged = dict(old_subj)
+                    merged["rv_marks"] = None
+                    merged["rv_result"] = ""
+                    merged["final_marks"] = None
+                    merged["final_result"] = ""
+                    merged["final_grade"] = ""
+                    merged["is_revaluated"] = False
 
             merged_subjects.append(merged)
 

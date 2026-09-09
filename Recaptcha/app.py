@@ -976,6 +976,8 @@ def compare_reval(data):
 def update_reval_result(data):
     usn = str(data.get("usn", "")).strip().upper()
     batch_id = str(data.get("batch_id", ""))
+    selected_codes = data.get("selected_codes")  # None = update all, list = update only those
+    print(f"[Reval] selected_codes={selected_codes} type={type(selected_codes)}")
     if not usn or not batch_id:
         emit("reval-updated", {"ok": False, "error": "USN and batch required"})
         return
@@ -1010,6 +1012,7 @@ def update_reval_result(data):
                 "final_result": str(r.get("Final Result", "") or "").strip(),
                 "subject_name": str(r.get("Subject Name", "") or "").strip(),
             }
+        print(f"[Reval] rv_map keys={list(rv_map.keys())}")
 
         # Fetch old student to get ALL subjects
         old_student = None
@@ -1034,7 +1037,14 @@ def update_reval_result(data):
             orig_result = subj.get("original_result") or subj.get("result", "")
             orig_grade = subj.get("original_grade") or subj.get("grade", "")
 
-            if code in rv_map:
+            # If selected_codes is provided, only update subjects in that list
+            should_apply_reval = code in rv_map and (selected_codes is None or code in selected_codes)
+            if should_apply_reval:
+                print(f"[Reval] APPLY reval for {code} (in_rv_map={code in rv_map}, selected={selected_codes is None or code in selected_codes})")
+            elif code in rv_map:
+                print(f"[Reval] SKIP reval for {code} (not in selected_codes={selected_codes})")
+
+            if should_apply_reval:
                 rv = rv_map[code]
                 # TOTAL = INTERNAL + REVALUATION EXTERNAL
                 rv_ext = rv["rv_marks"] if rv["rv_marks"] is not None else (rv["final_marks"] if rv["final_marks"] is not None else orig_ext)
@@ -1068,7 +1078,7 @@ def update_reval_result(data):
                     "original_grade": orig_grade,
                 })
             else:
-                # Non-reval'd: keep original DB data exactly
+                # Non-reval'd OR reval'd but not selected: keep original DB data exactly
                 subjects.append({
                     "code": code,
                     "subject_name": subj.get("subject_name", ""),
