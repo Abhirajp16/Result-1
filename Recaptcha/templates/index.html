@@ -1754,36 +1754,39 @@ function renderAnalytics(batch, students) {
     h += '<div class="fs-stat fs-stat-info"><span class="fs-num">' + students.length + '</span><span class="fs-label">total students</span></div>';
     h += '<div class="fs-stat fs-stat-accent"><span class="fs-num">' + ((failedStudents.length / students.length * 100).toFixed(1)) + '%</span><span class="fs-label">fail rate</span></div>';
     h += '</div>';
-    h += '<div class="failed-list">';
-    failedStudents.forEach(st => {
-      const totalFails = st.fails.length;
-      h += '<div class="failed-card">';
-      h += '<div class="fc-head">';
-      h += '<div class="fc-ident"><span class="fc-usn">' + st.usn + '</span><span class="fc-name">' + st.name + '</span></div>';
-      h += '<div class="fc-badges">';
-      h += '<span class="pill fail">' + totalFails + ' backlog' + (totalFails > 1 ? 's' : '') + '</span>';
-      if (st.percentage != null) h += '<span class="pill">' + st.percentage.toFixed(1) + '%</span>';
-      h += '</div>';
-      h += '</div>';
-      h += '<div class="fc-subjects">';
-      st.fails.forEach(f => {
+    h += '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">';
+    h += '<div style="max-height:400px;overflow-y:auto;">';
+    h += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+    h += '<thead style="position:sticky;top:0;z-index:1;"><tr style="background:linear-gradient(135deg,#93C5FD 0%,#60A5FA 100%);">';
+    h += '<th style="padding:10px 14px;text-align:left;font-weight:700;color:#1E3A5F;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">USN</th>';
+    h += '<th style="padding:10px 14px;text-align:left;font-weight:700;color:#1E3A5F;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Name</th>';
+    h += '<th style="padding:10px 14px;text-align:center;font-weight:700;color:#1E3A5F;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Backlogs</th>';
+    h += '<th style="padding:10px 14px;text-align:center;font-weight:700;color:#1E3A5F;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Percentage</th>';
+    h += '<th style="padding:10px 14px;text-align:left;font-weight:700;color:#1E3A5F;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Failed Subjects</th>';
+    h += '</tr></thead><tbody>';
+    failedStudents.forEach((st, idx) => {
+      let rowBg = idx % 2 === 0 ? "#fff" : "#F0F9FF";
+      h += '<tr style="background:' + rowBg + ';border-bottom:1px solid #DBEAFE;">';
+      h += '<td style="padding:10px 14px;font-family:\'SF Mono\',Consolas,monospace;font-weight:700;font-size:12px;color:#1F2937;">' + st.usn + '</td>';
+      h += '<td style="padding:10px 14px;color:#374151;">' + (st.name || "—") + '</td>';
+      h += '<td style="padding:10px 14px;text-align:center;"><span style="display:inline-block;background:#DBEAFE;color:#1E40AF;font-size:11px;padding:3px 10px;border-radius:6px;font-weight:700;">' + st.fails.length + '</span></td>';
+      h += '<td style="padding:10px 14px;text-align:center;font-weight:600;color:#6B7280;">' + (st.percentage != null ? st.percentage.toFixed(1) + "%" : "—") + '</td>';
+      h += '<td style="padding:10px 14px;">';
+      st.fails.forEach((f, fi) => {
         const intm = f.internal != null ? f.internal : '—';
         const extm = f.external != null ? f.external : '—';
         const totm = f.total != null ? f.total : '—';
-        h += '<div class="fc-sub">';
-        h += '<span class="fc-sub-code">' + f.code + '</span>';
-        h += '<span class="fc-sub-name">' + (f.subject_name || '') + '</span>';
-        h += '<div class="fc-marks">';
-        h += '<span class="fc-m-int">I:' + intm + '</span>';
-        h += '<span class="fc-m-ext">E:' + extm + '</span>';
-        h += '<span class="fc-m-tot">T:' + totm + '</span>';
-        h += '</div>';
+        h += '<div style="display:flex;align-items:center;gap:6px;margin:4px 0;flex-wrap:wrap;">';
+        h += '<span style="background:#FEE2E2;color:#991B1B;font-size:10px;padding:2px 8px;border-radius:4px;font-weight:700;font-family:\'SF Mono\',Consolas,monospace;">' + f.code + '</span>';
+        h += '<span style="background:#DBEAFE;color:#1E40AF;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;">I:' + intm + '</span>';
+        h += '<span style="background:#FCE7F3;color:#9D174D;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;">E:' + extm + '</span>';
+        h += '<span style="background:#D1FAE5;color:#065F46;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;">T:' + totm + '</span>';
         h += '</div>';
       });
-      h += '</div>';
-      h += '</div>';
+      h += '</td>';
+      h += '</tr>';
     });
-    h += '</div>';
+    h += '</tbody></table></div></div>';
     fc.innerHTML = h;
   }
 }
