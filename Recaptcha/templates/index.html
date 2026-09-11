@@ -670,7 +670,13 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
       <div class="panel"><h3>Percentage distribution</h3><div class="chart-box"><canvas id="chart_perc"></canvas></div></div>
       <div class="panel"><h3>Result breakdown</h3><div class="chart-box"><canvas id="chart_pie"></canvas></div></div>
     </div>
-    <div class="panel"><h3>Subject-wise average (total marks)</h3><div class="chart-box"><canvas id="chart_subj"></canvas></div></div>
+    <div class="grid-2">
+      <div class="panel"><h3>Subject-wise average (total marks)</h3><div class="chart-box"><canvas id="chart_subj"></canvas></div></div>
+      <div class="panel">
+        <h3 style="display:flex;align-items:center;justify-content:space-between;">Student SGPA Rankings <button onclick="openSgpaModal()" style="background:none;border:1px solid #D1D5DB;border-radius:8px;padding:4px 12px;font-size:11px;font-weight:700;color:#6B7280;cursor:pointer;transition:background .15s;" onmouseover="this.style.background='#F3F4F6'" onmouseout="this.style.background='none'">See More</button></h3>
+        <div id="an_sgpa_rankings"></div>
+      </div>
+    </div>
 
     <div class="panel" id="an_failed_panel" style="display:none;">
       <h3 style="margin:0 0 14px;">Students with Backlogs</h3>
@@ -904,7 +910,10 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
     document.querySelectorAll(".tab-page").forEach(p => p.classList.remove("active"));
     btn.classList.add("active");
     $("tab-" + btn.dataset.tab).classList.add("active");
-    if (btn.dataset.tab === "analytics") loadBatches();
+    if (btn.dataset.tab === "analytics") {
+      loadBatches();
+      if (currentBatch) { delete batchStudents[currentBatch]; socket.emit("get-batch-results", { batch_id: currentBatch }); }
+    }
     if (btn.dataset.tab === "browse") loadBatches();
     if (btn.dataset.tab === "reval") { loadBatches(); rvPopulateBatches(); }
   });
@@ -1367,7 +1376,6 @@ function renderRevalCompare(data) {
   html += '<div style="background:linear-gradient(180deg,#ECFDF5 0%,#FFFFFF 40%);border-radius:12px;border:1px solid #A7F3D0;overflow:hidden;">';
   html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
   html += '<thead><tr style="background:linear-gradient(135deg,#10B981 0%,#059669 100%);">';
-  html += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;width:36px;"><input type="checkbox" id="rv_select_all" onchange="rvToggleAll(this)" style="cursor:pointer;accent-color:#fff;width:14px;height:14px;"></th>';
   html += '<th style="padding:10px 12px;text-align:left;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Code</th>';
   html += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">INT</th>';
   html += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">OLD EXT</th>';
@@ -1388,20 +1396,20 @@ function renderRevalCompare(data) {
     const origGrd = s.original_grade || "";
     const improved = isRv && origTot != null && finalM != null && finalM > origTot;
     const deteriorated = isRv && origTot != null && finalM != null && finalM < origTot;
+    const unchanged = isRv && rvM != null && origTot != null && finalM != null && finalM === origTot;
+    let statusLabel = "";
+    if (improved) statusLabel = '<span style="display:inline-block;background:#D1FAE5;color:#065F46;font-size:9px;padding:2px 8px;border-radius:4px;font-weight:700;margin-left:6px;">Improved</span>';
+    else if (deteriorated) statusLabel = '<span style="display:inline-block;background:#FEE2E2;color:#991B1B;font-size:9px;padding:2px 8px;border-radius:4px;font-weight:700;margin-left:6px;">Reduced \u2013 Not Updated</span>';
+    else if (unchanged) statusLabel = '<span style="display:inline-block;background:#F3F4F6;color:#6B7280;font-size:9px;padding:2px 8px;border-radius:4px;font-weight:700;margin-left:6px;">No Change</span>';
     let rowBg = "";
     if (improved) rowBg = "background:linear-gradient(90deg,#ECFDF5 0%,#D1FAE5 100%);";
     else if (deteriorated) rowBg = "background:#FEF2F2;";
     else if (isRv) rowBg = "background:#F0FDF4;";
 
     html += '<tr style="border-bottom:1px solid #E5E7EB;' + rowBg + '">';
-    /* Checkbox — only for reval'd subjects with actual RV marks */
-    if (isRv && rvM != null) {
-      html += '<td style="padding:9px 12px;text-align:center;"><input type="checkbox" class="rv_subj_chk" data-code="' + s.code + '" onchange="rvUpdateSelectedCount()" style="cursor:pointer;accent-color:#059669;width:14px;height:14px;"></td>';
-    } else {
-      html += '<td style="padding:9px 12px;text-align:center;color:#D1D5DB;">—</td>';
-    }
     html += '<td style="padding:9px 12px;font-weight:600;font-family:\'SF Mono\',Consolas,monospace;font-size:11.5px;color:#1F2937;">' + s.code;
     if (isRv) html += ' <span style="display:inline-block;background:linear-gradient(135deg,#10B981,#059669);color:#fff;font-size:9px;padding:2px 8px;border-radius:4px;font-weight:700;margin-left:4px;vertical-align:middle;box-shadow:0 1px 3px rgba(5,150,105,.3);">RV</span>';
+    html += statusLabel;
     html += '</td>';
     html += '<td style="padding:9px 12px;text-align:center;color:#4B5563;">' + (s.internal != null ? s.internal : "—") + '</td>';
     if (isRv && rvM != null) {
@@ -1438,10 +1446,28 @@ function renderRevalCompare(data) {
 
   html += '</div>'; /* flex gap */
 
-  /* ── Update Selected & Store bar ── */
+  /* ── Auto-analysis summary ── */
+  let autoImproved = 0, autoReduced = 0, autoUnchanged = 0;
+  newSubs.forEach(s => {
+    if (s.is_revaluated && s.rv_marks != null) {
+      const oT = s.original_total != null ? s.original_total : s.total;
+      const fT = s.final_total != null ? s.final_total : s.total;
+      if (oT != null && fT != null) {
+        if (fT > oT) autoImproved++;
+        else if (fT < oT) autoReduced++;
+        else autoUnchanged++;
+      }
+    }
+  });
+  html += '<div style="margin-top:14px;padding:10px 14px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;display:flex;gap:16px;flex-wrap:wrap;font-size:12px;font-weight:600;">';
+  if (autoImproved) html += '<span style="color:#059669;">✓ ' + autoImproved + ' Improved \u2013 auto-selected</span>';
+  if (autoReduced) html += '<span style="color:#DC2626;">✗ ' + autoReduced + ' Reduced \u2013 skipped</span>';
+  if (autoUnchanged) html += '<span style="color:#6B7280;">— ' + autoUnchanged + ' No Change</span>';
+  html += '</div>';
+
+  /* ── Store bar ── */
   html += '<div style="margin-top:16px;padding-top:16px;border-top:1px solid #E5E7EB;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">';
-  html += '<div id="rv_selected_info" style="font-size:12px;color:#6B7280;font-weight:600;"></div>';
-  html += '<button id="rv_update_selected_btn" class="btn" onclick="rvUpdateSelected(\'' + (data.usn || "") + '\')" style="background:linear-gradient(135deg,#3B82F6,#1D4ED8);color:#fff;border:none;padding:9px 20px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(59,130,246,.3);transition:transform .15s,box-shadow .15s;" onmouseover="this.style.transform=\'translateY(-1px)\';this.style.boxShadow=\'0 4px 12px rgba(59,130,246,.4)\'" onmouseout="this.style.transform=\'\';this.style.boxShadow=\'0 2px 8px rgba(59,130,246,.3)\'">Update Selected</button>';
+  html += '<div style="font-size:12px;color:#6B7280;font-weight:600;">' + autoImproved + ' subject(s) will be updated</div>';
   html += '<div style="margin-left:auto;display:flex;gap:10px;align-items:center;">';
   html += '<label style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.06em;">Store in:</label>';
   html += '<select id="rv_update_batch" style="padding:9px 14px;border:1px solid #D1D5DB;border-radius:10px;font-size:13px;background:#fff;color:#1F2937;outline:none;transition:border-color .2s;">';
@@ -1450,7 +1476,7 @@ function renderRevalCompare(data) {
     html += '<option value="' + b.id + '">' + (b.department || "?") + " Sem " + (b.semester || "?") + " " + (b.scheme || "") + " (" + (b.student_count || 0) + ')</option>';
   });
   html += '</select>';
-  html += '<button class="btn" onclick="rvUpdateStore(\'' + (data.usn || "") + '\')" style="background:linear-gradient(135deg,#10B981,#059669);color:#fff;border:none;padding:9px 20px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(5,150,105,.3);transition:transform .15s,box-shadow .15s;" onmouseover="this.style.transform=\'translateY(-1px)\';this.style.boxShadow=\'0 4px 12px rgba(5,150,105,.4)\'" onmouseout="this.style.transform=\'\';this.style.boxShadow=\'0 2px 8px rgba(5,150,105,.3)\'">Update All & Store</button>';
+  html += '<button class="btn" onclick="rvUpdateStore(\'' + (data.usn || "") + '\')" style="background:linear-gradient(135deg,#10B981,#059669);color:#fff;border:none;padding:9px 20px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(5,150,105,.3);transition:transform .15s,box-shadow .15s;" onmouseover="this.style.transform=\'translateY(-1px)\';this.style.boxShadow=\'0 4px 12px rgba(5,150,105,.4)\'" onmouseout="this.style.transform=\'\';this.style.boxShadow=\'0 2px 8px rgba(5,150,105,.3)\'">Update & Store</button>';
   html += '</div>';
   html += '</div>';
 
@@ -1459,46 +1485,12 @@ function renderRevalCompare(data) {
   area.innerHTML = html;
 }
 
-function rvToggleAll(el) {
-  document.querySelectorAll('.rv_subj_chk').forEach(chk => { chk.checked = el.checked; });
-  rvUpdateSelectedCount();
-}
-
-function rvUpdateSelectedCount() {
-  const checked = document.querySelectorAll('.rv_subj_chk:checked');
-  const info = $('rv_selected_info');
-  const btn = $('rv_update_selected_btn');
-  if (checked.length > 0) {
-    info.textContent = checked.length + ' subject(s) selected for update';
-    btn.style.opacity = '1';
-    btn.style.pointerEvents = 'auto';
-  } else {
-    info.textContent = '';
-    btn.style.opacity = '0.5';
-    btn.style.pointerEvents = 'none';
-  }
-}
-
-function rvGetSelectedCodes() {
-  return Array.from(document.querySelectorAll('.rv_subj_chk:checked')).map(chk => chk.dataset.code);
-}
-
-function rvUpdateSelected(usn) {
-  const selectedCodes = rvGetSelectedCodes();
-  if (selectedCodes.length === 0) { toast("Select at least one subject to update"); return; }
-  const batchEl = $("rv_update_batch");
-  const batchId = batchEl ? batchEl.value : $("rv_batch_sel").value;
-  if (!batchId) { toast("Select a batch to store in"); return; }
-  if (!confirm("Update " + selectedCodes.length + " subject(s) for " + usn + " with revaluation marks?")) return;
-  socket.emit("update-reval-result", { usn: usn, batch_id: batchId, selected_codes: selectedCodes });
-}
-
 function rvUpdateStore(usn) {
   const batchEl = $("rv_update_batch");
   const batchId = batchEl ? batchEl.value : $("rv_batch_sel").value;
   if (!batchId) { toast("Select a batch to store in"); return; }
-  if (!confirm("Replace old result for " + usn + " with revaluation result?")) return;
-  socket.emit("update-reval-result", { usn: usn, batch_id: batchId, selected_codes: null });
+  if (!confirm("Update improved subjects for " + usn + " and store?")) return;
+  socket.emit("update-reval-result", { usn: usn, batch_id: batchId, selected_codes: "auto" });
 }
 
 socket.on("reval-updated", (d) => {
@@ -1507,9 +1499,9 @@ socket.on("reval-updated", (d) => {
     $("rv_compare_area").style.display = "none";
     $("rv_compare_usn").value = "";
     delete batchStudents[d.batch_id];
-    if (currentBatch === d.batch_id) {
-      socket.emit("get-batch-results", { batch_id: d.batch_id });
-    }
+    /* Always refresh analytics & browse data for the updated batch */
+    socket.emit("get-batch-results", { batch_id: d.batch_id });
+    loadBatches();
   } else {
     toast("Update failed: " + (d.error || "unknown"));
   }
@@ -1703,6 +1695,39 @@ function renderAnalytics(batch, students) {
       plugins: { legend: { display: false } },
       scales: { y: { beginAtZero: true, grid: { color: "#eef1f5" }, ticks: { color: "#48506d" } }, x: { grid: { display: false }, ticks: { color: "#48506d", maxRotation: 45 } } } }
   });
+
+  /* ---- Student SGPA Rankings ---- */
+  sgpaModalData = sgSorted;
+  const sgpaRankEl = $("an_sgpa_rankings");
+  if (sgSorted.length) {
+    let rankH = '<div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;max-height:320px;overflow-y:auto;">';
+    rankH += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+    rankH += '<thead style="position:sticky;top:0;z-index:1;"><tr style="background:linear-gradient(135deg,#10B981 0%,#059669 100%);">';
+    rankH += '<th style="padding:8px 10px;text-align:center;font-weight:700;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.05em;width:40px;">Rank</th>';
+    rankH += '<th style="padding:8px 10px;text-align:left;font-weight:700;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">USN</th>';
+    rankH += '<th style="padding:8px 10px;text-align:left;font-weight:700;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Name</th>';
+    rankH += '<th style="padding:8px 10px;text-align:center;font-weight:700;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.05em;width:60px;">SGPA</th>';
+    rankH += '</tr></thead><tbody>';
+    sgSorted.forEach((entry, idx) => {
+      const sg = entry.sg;
+      const s = entry.s;
+      const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : (idx + 1);
+      let rowBg = idx % 2 === 0 ? "#fff" : "#F9FAFB";
+      if (idx === 0) rowBg = "#FFFBEB";
+      else if (idx === 1) rowBg = "#F9FAFB";
+      else if (idx === 2) rowBg = "#FEF3C7";
+      rankH += `<tr style="background:${rowBg};border-bottom:1px solid #F3F4F6;">`;
+      rankH += `<td style="padding:7px 10px;text-align:center;font-weight:800;color:${idx < 3 ? '#059669' : '#6B7280'};font-size:${idx < 3 ? '14px' : '12px'};">${medal}</td>`;
+      rankH += `<td style="padding:7px 10px;font-family:'SF Mono',Consolas,monospace;font-weight:600;font-size:11px;color:#1F2937;">${s.usn}</td>`;
+      rankH += `<td style="padding:7px 10px;color:#374151;font-size:12px;">${s.name || "—"}</td>`;
+      rankH += `<td style="padding:7px 10px;text-align:center;font-weight:800;font-size:13px;color:#059669;">${sg.toFixed(2)}</td>`;
+      rankH += '</tr>';
+    });
+    rankH += '</tbody></table></div>';
+    sgpaRankEl.innerHTML = rankH;
+  } else {
+    sgpaRankEl.innerHTML = '<div style="color:#6B7280;font-size:13px;text-align:center;padding:20px;">No SGPA data available</div>';
+  }
 
   /* ---- Failed Students ---- */
   const failedStudents = [];
@@ -2108,6 +2133,43 @@ function ordinal(n) {
   const s = ["","1ST","2ND","3RD","4TH","5TH","6TH","7TH","8TH"];
   return s[n] || n + "TH";
 }
+
+/* ---- SGPA Rankings Modal ---- */
+let sgpaModalData = [];
+function openSgpaModal() {
+  if (!sgpaModalData.length) return;
+  let h = '<div id="sgpa_modal_overlay" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.4);backdrop-filter:blur(4px);" onclick="if(event.target===this)closeSgpaModal()">';
+  h += '<div style="background:#fff;border-radius:16px;width:90%;max-width:650px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.2);">';
+  h += '<div style="padding:18px 24px;border-bottom:1px solid #E5E7EB;display:flex;align-items:center;justify-content:space-between;">';
+  h += '<div><div style="font-size:16px;font-weight:800;color:#111827;">Student SGPA Rankings</div><div style="font-size:12px;color:#6B7280;margin-top:2px;">' + sgpaModalData.length + ' students</div></div>';
+  h += '<button onclick="closeSgpaModal()" style="background:none;border:none;font-size:20px;color:#6B7280;cursor:pointer;padding:4px 8px;border-radius:6px;transition:background .15s;" onmouseover="this.style.background=\'#F3F4F6\'" onmouseout="this.style.background=\'none\'">&times;</button>';
+  h += '</div>';
+  h += '<div style="flex:1;overflow-y:auto;padding:0;">';
+  h += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+  h += '<thead style="position:sticky;top:0;z-index:1;"><tr style="background:linear-gradient(135deg,#10B981 0%,#059669 100%);">';
+  h += '<th style="padding:10px 14px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;width:50px;">Rank</th>';
+  h += '<th style="padding:10px 14px;text-align:left;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">USN</th>';
+  h += '<th style="padding:10px 14px;text-align:left;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Name</th>';
+  h += '<th style="padding:10px 14px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;width:70px;">SGPA</th>';
+  h += '</tr></thead><tbody>';
+  sgpaModalData.forEach((entry, idx) => {
+    const sg = entry.sg, s = entry.s;
+    const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : (idx + 1);
+    let rowBg = idx % 2 === 0 ? "#fff" : "#F9FAFB";
+    if (idx === 0) rowBg = "#FFFBEB";
+    else if (idx === 1) rowBg = "#F9FAFB";
+    else if (idx === 2) rowBg = "#FEF3C7";
+    h += `<tr style="background:${rowBg};border-bottom:1px solid #F3F4F6;">`;
+    h += `<td style="padding:10px 14px;text-align:center;font-weight:800;color:${idx < 3 ? '#059669' : '#6B7280'};font-size:${idx < 3 ? '16px' : '13px'};">${medal}</td>`;
+    h += `<td style="padding:10px 14px;font-family:'SF Mono',Consolas,monospace;font-weight:600;font-size:12px;color:#1F2937;">${s.usn}</td>`;
+    h += `<td style="padding:10px 14px;color:#374151;">${s.name || "—"}</td>`;
+    h += `<td style="padding:10px 14px;text-align:center;font-weight:800;font-size:15px;color:#059669;">${sg.toFixed(2)}</td>`;
+    h += '</tr>';
+  });
+  h += '</tbody></table></div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', h);
+}
+function closeSgpaModal() { const el = document.getElementById('sgpa_modal_overlay'); if (el) el.remove(); }
 
 
 </script>

@@ -1038,7 +1038,18 @@ def update_reval_result(data):
             orig_grade = subj.get("original_grade") or subj.get("grade", "")
 
             # If selected_codes is provided, only update subjects in that list
-            should_apply_reval = code in rv_map and (selected_codes is None or code in selected_codes)
+            if selected_codes == "auto":
+                # Auto mode: only apply reval if new total > old total (improved)
+                rv = rv_map.get(code)
+                if rv:
+                    rv_ext = rv["rv_marks"] if rv["rv_marks"] is not None else (rv["final_marks"] if rv["final_marks"] is not None else orig_ext)
+                    int_val = rv["internal"] if rv["internal"] is not None else subj.get("internal")
+                    new_total = _calc_total(int_val, rv_ext)
+                    should_apply_reval = new_total is not None and orig_total is not None and new_total > orig_total
+                else:
+                    should_apply_reval = False
+            else:
+                should_apply_reval = code in rv_map and (selected_codes is None or code in selected_codes)
             if should_apply_reval:
                 print(f"[Reval] APPLY reval for {code} (in_rv_map={code in rv_map}, selected={selected_codes is None or code in selected_codes})")
             elif code in rv_map:
