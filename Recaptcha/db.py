@@ -385,6 +385,8 @@ def compute_sgpa(students, credits_map):
     for s in students:
         total_credits = 0
         total_points = 0
+        cgpa_credits = 0
+        cgpa_points = 0
         subjects = s.get("subjects", []) or []
         if isinstance(subjects, str):
             subjects = json.loads(subjects)
@@ -397,10 +399,8 @@ def compute_sgpa(students, credits_map):
                 cr = float(cr)
             except (TypeError, ValueError):
                 continue
-            # Use reval'd grade if available
             grade = subj.get("final_grade") if subj.get("is_revaluated") and subj.get("final_grade") else subj.get("grade", "")
             if not grade:
-                # Fallback: compute from best available total
                 if subj.get("is_revaluated") and subj.get("final_total") is not None:
                     best_total = subj["final_total"]
                 elif subj.get("is_revaluated") and subj.get("final_marks") is not None and subj.get("internal") is not None:
@@ -408,12 +408,14 @@ def compute_sgpa(students, credits_map):
                 else:
                     best_total = subj.get("total")
                 grade = _grade(best_total) if best_total is not None else ""
-            gp = GRADE_POINTS.get(grade)
-            if gp is None:
-                gp = 0
+            gp = GRADE_POINTS.get(grade, 0)
             total_credits += cr
             total_points += gp * cr
+            if gp > 0:
+                cgpa_credits += cr
+                cgpa_points += gp * cr
         s["sgpa"] = round(total_points / total_credits, 2) if total_credits > 0 else None
+        s["cgpa"] = round(cgpa_points / cgpa_credits, 2) if cgpa_credits > 0 else None
     return students
 
 

@@ -1530,7 +1530,17 @@ socket.on("batches", data => {
   });
   $("an_empty").style.display = batches.length ? "none" : "block";
   if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
-  if (currentBatch && batches.some(b => b.id === currentBatch)) {
+  if (window._pendingBatchId) {
+    var pb = window._pendingBatchId;
+    window._pendingBatchId = null;
+    if (batches.some(b => b.id === pb)) {
+      sel.value = pb;
+      currentBatch = pb;
+      syncAllCustomSelects();
+      delete batchStudents[pb];
+      socket.emit("get-batch-results", { batch_id: pb });
+    }
+  } else if (currentBatch && batches.some(b => b.id === currentBatch)) {
     delete batchStudents[currentBatch];
     socket.emit("get-batch-results", { batch_id: currentBatch });
   } else if (currentBatch) {
@@ -1550,6 +1560,80 @@ socket.on("batches", data => {
     }
   });
 });
+
+function openSubjectModal(subjectCode) {
+  if (!subjectCode || !currentBatch) return;
+  var students = batchStudents[currentBatch];
+  if (!students || !students.length) return;
+  var list = [];
+  students.forEach(function(s) {
+    (s.subjects || []).forEach(function(sub) {
+      if ((sub.code || "").toUpperCase() !== subjectCode.toUpperCase()) return;
+      var t = (sub.is_revaluated && sub.final_total != null) ? sub.final_total : sub.total;
+      if (t == null) return;
+      t = Number(t);
+      var g = (sub.is_revaluated && sub.final_grade) ? sub.final_grade : gradePoint(t) || "F";
+      list.push({ usn: s.usn || "", name: s.name || "", internal: sub.internal, external: sub.external, marks: t, grade: g });
+    });
+  });
+  if (!list.length) return;
+  list.sort(function(a, b) { return b.marks - a.marks; });
+  var hi = list[0].marks, lo = list[list.length - 1].marks;
+  var sum = 0; list.forEach(function(x) { sum += x.marks; });
+  var avg = (sum / list.length).toFixed(1);
+  var pass = 0, fail = 0;
+  list.forEach(function(x) { if (x.marks >= 40) pass++; else fail++; });
+
+  var h = '<div id="subj_modal_overlay" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.4);backdrop-filter:blur(4px);" onclick="if(event.target===this)closeSubjectModal()">';
+  h += '<div style="background:#fff;border-radius:16px;width:94%;max-width:780px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">';
+
+  h += '<div style="padding:18px 24px;border-bottom:1px solid #E5E7EB;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">';
+  h += '<div><div style="font-size:16px;font-weight:800;color:#111827;font-family:ui-monospace,Consolas,monospace;">' + esc(subjectCode) + '</div>';
+  h += '<div style="font-size:12px;color:#6B7280;margin-top:2px;">Subject-wise marks analysis &mdash; ' + list.length + ' students</div></div>';
+  h += '<button onclick="closeSubjectModal()" style="background:none;border:none;font-size:20px;color:#6B7280;cursor:pointer;padding:4px 8px;border-radius:6px;" onmouseover="this.style.background=\'#F3F4F6\'" onmouseout="this.style.background=\'none\'">&times;</button>';
+  h += '</div>';
+
+  h += '<div style="padding:14px 24px;display:flex;gap:12px;flex-wrap:wrap;border-bottom:1px solid #F3F4F6;">';
+  h += '<div style="flex:1;min-width:80px;text-align:center;padding:10px;border-radius:10px;background:#F0FDF4;"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#6B7280;letter-spacing:.05em;">Highest</div><div style="font-size:20px;font-weight:800;color:#059669;margin-top:2px;">' + hi + '</div></div>';
+  h += '<div style="flex:1;min-width:80px;text-align:center;padding:10px;border-radius:10px;background:#FEF2F2;"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#6B7280;letter-spacing:.05em;">Lowest</div><div style="font-size:20px;font-weight:800;color:#DC2626;margin-top:2px;">' + lo + '</div></div>';
+  h += '<div style="flex:1;min-width:80px;text-align:center;padding:10px;border-radius:10px;background:#EFF6FF;"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#6B7280;letter-spacing:.05em;">Average</div><div style="font-size:20px;font-weight:800;color:#2563EB;margin-top:2px;">' + avg + '</div></div>';
+  h += '<div style="flex:1;min-width:80px;text-align:center;padding:10px;border-radius:10px;background:#F5F3FF;"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#6B7280;letter-spacing:.05em;">Pass / Fail</div><div style="font-size:20px;font-weight:800;color:#7C3AED;margin-top:2px;">' + pass + ' / ' + fail + '</div></div>';
+  h += '</div>';
+
+  h += '<div style="flex:1;overflow-y:auto;padding:0;">';
+  h += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+  h += '<thead style="position:sticky;top:0;z-index:1;"><tr style="background:linear-gradient(135deg,#1C7A5E 0%,#059669 100%);">';
+  h += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;width:48px;">Rank</th>';
+  h += '<th style="padding:10px 12px;text-align:left;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">USN</th>';
+  h += '<th style="padding:10px 12px;text-align:left;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Name</th>';
+  h += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Int</th>';
+  h += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Ext</th>';
+  h += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Total</th>';
+  h += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Grade</th>';
+  h += '<th style="padding:10px 12px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Status</th>';
+  h += '</tr></thead><tbody>';
+  var rc = 0;
+  list.forEach(function(st, i) {
+    var isFail = st.marks < 40;
+    var bg = i % 2 === 0 ? "#fff" : "#F9FAFB";
+    var medal = "\u2014";
+    if (isFail) { bg = "#FFF5F5"; } else { rc++; medal = rc; if (rc === 1) { medal = "\uD83E\uDD47"; bg = "#ECFDF5"; } else if (rc === 2) { medal = "\uD83E\uDD48"; } else if (rc === 3) { medal = "\uD83E\uDD49"; } }
+    var ok = !isFail;
+    h += '<tr style="background:' + bg + ';">';
+    h += '<td style="padding:8px 12px;text-align:center;font-weight:800;color:' + (rc <= 3 ? (rc === 1 ? "#059669" : rc === 2 ? "#6B7280" : "#D97706") : "#6B7280") + ';">' + medal + '</td>';
+    h += '<td style="padding:8px 12px;font-family:ui-monospace,Consolas,monospace;font-weight:600;font-size:12px;">' + esc(st.usn) + '</td>';
+    h += '<td style="padding:8px 12px;color:#374151;">' + esc(st.name) + '</td>';
+    h += '<td style="padding:8px 12px;text-align:center;font-weight:600;">' + (st.internal != null ? st.internal : "\u2014") + '</td>';
+    h += '<td style="padding:8px 12px;text-align:center;font-weight:600;">' + (st.external != null ? st.external : "\u2014") + '</td>';
+    h += '<td style="padding:8px 12px;text-align:center;font-weight:800;color:' + (isFail ? "#DC2626" : "#059669") + ';">' + st.marks + '</td>';
+    h += '<td style="padding:8px 12px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-weight:700;font-size:11px;background:' + (isFail ? "#FEE2E2" : "#D1FAE5") + ';color:' + (isFail ? "#991B1B" : "#065F46") + ';">' + (st.grade || "\u2014") + '</span></td>';
+    h += '<td style="padding:8px 12px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:' + (ok ? "#D1FAE5;color:#065F46" : "#FEE2E2;color:#991B1B") + ';">' + (ok ? "PASS" : "FAIL") + '</span></td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table></div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', h);
+}
+function closeSubjectModal() { var el = document.getElementById('subj_modal_overlay'); if (el) el.remove(); }
 
 $("an_batch_sel").addEventListener("change", e => {
   if (!e.target.value) {
@@ -1691,10 +1775,23 @@ function renderAnalytics(batch, students) {
   charts.chart_subj = new Chart($("chart_subj"), {
     type: "bar",
     data: { labels: subjLabels, datasets: [{ label: "Avg total marks", data: subjAvg, backgroundColor: soft, borderRadius: 5, maxBarThickness: 42 }] },
-    options: { responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, grid: { color: "#eef1f5" }, ticks: { color: "#48506d" } }, x: { grid: { display: false }, ticks: { color: "#48506d", maxRotation: 45 } } } }
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      onClick: function(evt, elements) {
+        if (elements.length > 0) {
+          var idx = elements[0].index;
+          var code = subjLabels[idx];
+          openSubjectModal(code);
+        }
+      },
+      plugins: { legend: { display: false }, tooltip: { enabled: true } },
+      scales: { y: { beginAtZero: true, grid: { color: "#eef1f5" }, ticks: { color: "#48506d" } }, x: { grid: { display: false }, ticks: { color: "#48506d", maxRotation: 45 } } }
+    }
   });
+  var chartCanvas = $("chart_subj");
+  chartCanvas.style.cursor = "pointer";
+  chartCanvas.title = "Click a bar to view subject details";
 
   /* ---- Student SGPA Rankings ---- */
   sgpaModalData = sgSorted;
@@ -2173,6 +2270,8 @@ function openSgpaModal() {
   document.body.insertAdjacentHTML('beforeend', h);
 }
 function closeSgpaModal() { const el = document.getElementById('sgpa_modal_overlay'); if (el) el.remove(); }
+
+
 
 
 </script>

@@ -143,14 +143,22 @@ function render(data){
 
   const maxSem=Math.max(...sems.map(s=>semNum(s.semester)),8);
   const semSGPAs={};let totalBacklogs=0;
+  let cgpa_num=0,cgpa_den=0;
   sems.forEach(s=>{
     const num=semNum(s.semester);
     const sgpa=calcSGPA(s.subjects||[]);
     semSGPAs[num]=sgpa;
     totalBacklogs+=(s.subjects||[]).filter(sub=>{const r=sub.is_revaluated&&sub.final_result?sub.final_result:sub.result;return r==="F";}).length;
+    (s.subjects||[]).forEach(sub=>{
+      const cr=sub.credit!=null&&sub.credit>0?sub.credit:4;
+      const isRv=sub.is_revaluated&&sub.final_grade;
+      const g=isRv?sub.final_grade:gradeOf(sub.total);
+      const gp=GRADE_POINTS[g];
+      if(gp===undefined)return;
+      if(gp>0){cgpa_num+=gp*cr;cgpa_den+=cr;}
+    });
   });
-  const sgpas=Object.values(semSGPAs).filter(v=>v!=="—").map(Number);
-  const cgpa=sgpas.length?(sgpas.reduce((a,b)=>a+b,0)/sgpas.length).toFixed(2):"—";
+  const cgpa=cgpa_den>0?(cgpa_num/cgpa_den).toFixed(2):"—";
 
   let h='';
 
@@ -166,7 +174,7 @@ function render(data){
     const val=semSGPAs[i]!==undefined?semSGPAs[i]:"—";
     h+=`<div class="sr-sem-cell"><div class="sr-sem-label">${ordinal(i)}</div><div class="sr-sem-val">${val}</div></div>`;
   }
-  h+=`<div class="sr-sem-cell sr-cgpa"><div class="sr-sem-label">Mean CGPA</div><div class="sr-sem-val">${cgpa}</div></div>`;
+  h+=`<div class="sr-sem-cell sr-cgpa"><div class="sr-sem-label">CGPA</div><div class="sr-sem-val">${cgpa}</div></div>`;
   h+=`<div class="sr-sem-cell sr-backlogs"><div class="sr-sem-label">Backlogs</div><div class="sr-sem-val">${totalBacklogs}</div></div>`;
   h+='</div>';
 

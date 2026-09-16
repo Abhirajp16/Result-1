@@ -6,7 +6,7 @@ import time
 import subprocess
 import pandas as pd
 from datetime import datetime
-from flask import Flask, render_template, send_from_directory, send_file, make_response, jsonify
+from flask import Flask, render_template, send_from_directory, send_file, make_response, jsonify, request
 from flask_socketio import SocketIO, emit
 import db
 from excel_header import HEADER_ROWS, DATA_HEADER_ROW, apply_header
@@ -45,6 +45,63 @@ def student_record_page():
     resp = make_response(render_template("student_record.html"))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return resp
+
+
+@app.route("/subject-analytics")
+def subject_analytics_page():
+    resp = make_response(render_template("subject_analytics.html"))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return resp
+
+
+@app.route("/api/subject-analytics")
+def api_subject_analytics():
+    batch_id = request.args.get("batch_id", "").strip()
+    subject_code = request.args.get("subject", "").strip().upper()
+    if not batch_id or not subject_code:
+        return jsonify({"error": "batch_id and subject required"}), 400
+    if not db.is_connected():
+        return jsonify({"error": db.status_msg}), 503
+    batch, students = db.fetch_batch_with_students(batch_id)
+    if batch is None:
+        return jsonify({"error": "Batch not found"}), 404
+    if batch.get("credits") and students:
+        credits_map = {k: float(v) for k, v in batch["credits"].items()}
+        students = db.compute_sgpa(students, credits_map)
+    result = []
+    for s in students:
+        for sub in (s.get("subjects") or []):
+            if sub.get("code", "").upper() != subject_code:
+                continue
+            t = sub.get("final_total") if sub.get("is_revaluated") and sub.get("final_total") is not None else sub.get("total")
+            if t is None:
+                continue
+            t = float(t)
+            is_rv = sub.get("is_revaluated") and sub.get("final_grade")
+            g = sub.get("final_grade") if is_rv else _grade_of(t)
+            result.append({
+                "usn": s.get("usn", ""),
+                "name": s.get("name", ""),
+                "internal": sub.get("internal"),
+                "external": sub.get("external"),
+                "marks": t,
+                "grade": g,
+            })
+            break
+    return jsonify({"batch": batch, "subject_code": subject_code, "students": result})
+
+
+def _grade_of(m):
+    if m is None: return "\u2026"
+    n = float(m)
+    if n >= 90: return "O"
+    if n >= 80: return "A+"
+    if n >= 70: return "A"
+    if n >= 60: return "B+"
+    if n >= 55: return "B"
+    if n >= 50: return "C"
+    if n >= 40: return "P"
+    return "F"
 
 
 @app.route("/download")
