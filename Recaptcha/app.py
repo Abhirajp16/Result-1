@@ -73,19 +73,10 @@ def api_subject_analytics():
         for sub in (s.get("subjects") or []):
             if sub.get("code", "").upper() != subject_code:
                 continue
-            t = sub.get("final_total") if sub.get("is_revaluated") and sub.get("final_total") is not None else sub.get("total")
-            if t is None:
-                continue
-            t = float(t)
-            is_rv = sub.get("is_revaluated") and sub.get("final_grade")
-            g = sub.get("final_grade") if is_rv else _grade_of(t)
             result.append({
                 "usn": s.get("usn", ""),
                 "name": s.get("name", ""),
-                "internal": sub.get("internal"),
-                "external": sub.get("external"),
-                "marks": t,
-                "grade": g,
+                "subject": sub,
             })
             break
     return jsonify({"batch": batch, "subject_code": subject_code, "students": result})

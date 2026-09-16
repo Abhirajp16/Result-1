@@ -75,17 +75,29 @@ function render(d){
   var code=d.subject_code;
   var list=d.students||[];
   if(!list.length){$("out").innerHTML='<div class="err">No data for '+code+'</div>';return;}
-  list.sort(function(a,b){return b.marks-a.marks;});
 
-  var hi=list[0].marks, lo=list[list.length-1].marks;
-  var sum=0;for(var i=0;i<list.length;i++)sum+=list[i].marks;
-  var avg=(sum/list.length).toFixed(1);
-  var pass=0,fail=0;
-  for(var i=0;i<list.length;i++){if(list[i].marks>=40)pass++;else fail++;}
+  var processed=[];
+  list.forEach(function(st){
+    var sub=st.subject;
+    var isRv=sub.is_revaluated===true;
+    var bestTotal=isRv&&sub.final_total!=null?sub.final_total:sub.total;
+    var bestResult=isRv&&sub.final_result?sub.final_result:(sub.result||"");
+    var bestGrade=isRv&&sub.final_grade?sub.final_grade:gradeOf(bestTotal);
+    var pass=bestResult!=="F";
+    processed.push({usn:st.usn,name:st.name,internal:sub.internal,external:sub.external,total:bestTotal,grade:bestGrade,pass:pass});
+  });
+
+  processed.sort(function(a,b){return (b.total||0)-(a.total||0);});
+
+  var hi=processed[0].total, lo=processed[processed.length-1].total;
+  var sum=0;for(var i=0;i<processed.length;i++)sum+=(processed[i].total||0);
+  var avg=(sum/processed.length).toFixed(1);
+  var passCount=0,failCount=0;
+  for(var i=0;i<processed.length;i++){if(processed[i].pass)passCount++;else failCount++;}
 
   var h='';
   h+='<div class="hdr"><div><h2>'+code+'</h2><div class="sub">Subject-wise marks analysis &mdash; all students ranked</div></div>';
-  h+='<div style="text-align:right;"><div class="pill">'+list.length+' students</div>';
+  h+='<div style="text-align:right;"><div class="pill">'+processed.length+' students</div>';
   if(batch)h+='<div class="info">'+(batch.department||"")+' &middot; Sem '+(batch.semester||"")+' &middot; '+(batch.scheme||"")+'</div>';
   h+='</div></div>';
 
@@ -93,7 +105,7 @@ function render(d){
   h+='<div class="stat"><div class="stat-l">Highest</div><div class="stat-v g">'+hi+'</div></div>';
   h+='<div class="stat"><div class="stat-l">Lowest</div><div class="stat-v r">'+lo+'</div></div>';
   h+='<div class="stat"><div class="stat-l">Average</div><div class="stat-v b">'+avg+'</div></div>';
-  h+='<div class="stat"><div class="stat-l">Pass / Fail</div><div class="stat-v p">'+pass+' / '+fail+'</div></div>';
+  h+='<div class="stat"><div class="stat-l">Pass / Fail</div><div class="stat-v p">'+passCount+' / '+failCount+'</div></div>';
   h+='</div>';
 
   h+='<div class="tw"><table><thead><tr>';
@@ -101,22 +113,22 @@ function render(d){
   h+='</tr></thead><tbody>';
 
   var rc=0;
-  for(var i=0;i<list.length;i++){
-    var st=list[i];
-    var fail=st.grade==="F"||st.marks<40;
+  for(var i=0;i<processed.length;i++){
+    var st=processed[i];
+    var fail=!st.pass;
     var bg=i%2===0?"#fff":"#F9FAFB";
     var medal="\u2014";
     if(fail){bg="#FFF5F5";}
     else{rc++;medal=rc;if(rc===1){medal="\uD83E\uDD47";bg="#ECFDF5";}else if(rc===2){medal="\uD83E\uDD48";}else if(rc===3){medal="\uD83E\uDD49";}}
     var gc=gC(st.grade);
-    var ok=!fail;
+    var ok=st.pass;
     h+='<tr style="background:'+bg+'">';
     h+='<td class="rc" style="color:'+(rc<=3?(rc===1?"#059669":rc===2?"#6B7280":"#D97706"):"#6B7280")+'">'+medal+'</td>';
     h+='<td class="mn">'+st.usn+'</td>';
     h+='<td style="color:#374151">'+(st.name||"\u2014")+'</td>';
     h+='<td class="mc" style="color:#6366F1">'+st.internal+'</td>';
     h+='<td class="mc" style="color:#6366F1">'+st.external+'</td>';
-    h+='<td class="mc" style="color:'+gc+'">'+st.marks+'</td>';
+    h+='<td class="mc" style="color:'+gc+'">'+st.total+'</td>';
     h+='<td style="text-align:center"><span class="gp" style="background:'+gB(st.grade)+';color:'+gc+'">'+(st.grade||"\u2014")+'</span></td>';
     h+='<td style="text-align:center"><span class="sp" style="background:'+(ok?"#D1FAE5;color:#065F46":"#FEE2E2;color:#991B1B")+'">'+(ok?"PASS":"FAIL")+'</span></td>';
     h+='</tr>';
