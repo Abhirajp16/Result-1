@@ -82,9 +82,9 @@ function render(d){
     var isRv=sub.is_revaluated===true;
     var bestTotal=isRv&&sub.final_total!=null?sub.final_total:sub.total;
     var bestResult=isRv&&sub.final_result?sub.final_result:(sub.result||"");
-    var bestGrade=isRv&&sub.final_grade?sub.final_grade:gradeOf(bestTotal);
+    var bestGrade=isRv&&sub.final_grade?sub.final_grade:(sub.grade||gradeOf(bestTotal));
     var pass=bestResult!=="F";
-    processed.push({usn:st.usn,name:st.name,internal:sub.internal,external:sub.external,total:bestTotal,grade:bestGrade,pass:pass});
+    processed.push({usn:st.usn,name:st.name,internal:sub.internal,external:sub.external,total:bestTotal,grade:bestGrade,pass:pass,isRv:isRv,origExt:sub.original_external,origTotal:sub.original_total});
   });
 
   processed.sort(function(a,b){return (b.total||0)-(a.total||0);});
@@ -127,8 +127,10 @@ function render(d){
     h+='<td class="mn">'+st.usn+'</td>';
     h+='<td style="color:#374151">'+(st.name||"\u2014")+'</td>';
     h+='<td class="mc" style="color:#6366F1">'+st.internal+'</td>';
-    h+='<td class="mc" style="color:#6366F1">'+st.external+'</td>';
-    h+='<td class="mc" style="color:'+gc+'">'+st.total+'</td>';
+    var extDisplay=st.isRv&&st.origExt!=null?st.origExt+' &rarr; '+st.external:st.external;
+    h+='<td class="mc" style="color:#6366F1">'+extDisplay+(st.isRv?' <span style="background:#059669;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;vertical-align:middle;">RV</span>':"")+'</td>';
+    var totDisplay=st.isRv&&st.origTotal!=null?st.origTotal+' &rarr; '+st.total:st.total;
+    h+='<td class="mc" style="color:'+gc+'">'+totDisplay+'</td>';
     h+='<td style="text-align:center"><span class="gp" style="background:'+gB(st.grade)+';color:'+gc+'">'+(st.grade||"\u2014")+'</span></td>';
     h+='<td style="text-align:center"><span class="sp" style="background:'+(ok?"#D1FAE5;color:#065F46":"#FEE2E2;color:#991B1B")+'">'+(ok?"PASS":"FAIL")+'</span></td>';
     h+='</tr>';

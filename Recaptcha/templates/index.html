@@ -1563,17 +1563,18 @@ socket.on("batches", data => {
 
 function openSubjectModal(subjectCode) {
   if (!subjectCode || !currentBatch) return;
+  _openSubjCode = subjectCode;
   var students = batchStudents[currentBatch];
   if (!students || !students.length) return;
   var list = [];
   students.forEach(function(s) {
     (s.subjects || []).forEach(function(sub) {
       if ((sub.code || "").toUpperCase() !== subjectCode.toUpperCase()) return;
-      var t = (sub.is_revaluated && sub.final_total != null) ? sub.final_total : sub.total;
-      if (t == null) return;
-      t = Number(t);
-      var g = (sub.is_revaluated && sub.final_grade) ? sub.final_grade : gradePoint(t) || "F";
-      list.push({ usn: s.usn || "", name: s.name || "", internal: sub.internal, external: sub.external, marks: t, grade: g });
+      var isRv = sub.is_revaluated === true;
+      var t = (isRv && sub.final_total != null) ? sub.final_total : sub.total;
+      var bestResult = (isRv && sub.final_result) ? sub.final_result : (sub.result || "");
+      var pass = bestResult !== "F";
+      list.push({ usn: s.usn || "", name: s.name || "", internal: sub.internal, external: sub.external, marks: t, grade: (isRv && sub.final_grade) ? sub.final_grade : sub.grade || "F", pass: pass, isRv: isRv, origExt: sub.original_external, origTotal: sub.original_total, origResult: sub.original_result });
     });
   });
   if (!list.length) return;
@@ -1582,7 +1583,7 @@ function openSubjectModal(subjectCode) {
   var sum = 0; list.forEach(function(x) { sum += x.marks; });
   var avg = (sum / list.length).toFixed(1);
   var pass = 0, fail = 0;
-  list.forEach(function(x) { if (x.marks >= 40) pass++; else fail++; });
+  list.forEach(function(x) { if (x.pass) pass++; else fail++; });
 
   var h = '<div id="subj_modal_overlay" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.4);backdrop-filter:blur(4px);" onclick="if(event.target===this)closeSubjectModal()">';
   h += '<div style="background:#fff;border-radius:16px;width:94%;max-width:780px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);">';
@@ -1614,7 +1615,7 @@ function openSubjectModal(subjectCode) {
   h += '</tr></thead><tbody>';
   var rc = 0;
   list.forEach(function(st, i) {
-    var isFail = st.marks < 40;
+    var isFail = !st.pass;
     var bg = i % 2 === 0 ? "#fff" : "#F9FAFB";
     var medal = "\u2014";
     if (isFail) { bg = "#FFF5F5"; } else { rc++; medal = rc; if (rc === 1) { medal = "\uD83E\uDD47"; bg = "#ECFDF5"; } else if (rc === 2) { medal = "\uD83E\uDD48"; } else if (rc === 3) { medal = "\uD83E\uDD49"; } }
@@ -1624,8 +1625,11 @@ function openSubjectModal(subjectCode) {
     h += '<td style="padding:8px 12px;font-family:ui-monospace,Consolas,monospace;font-weight:600;font-size:12px;">' + esc(st.usn) + '</td>';
     h += '<td style="padding:8px 12px;color:#374151;">' + esc(st.name) + '</td>';
     h += '<td style="padding:8px 12px;text-align:center;font-weight:600;">' + (st.internal != null ? st.internal : "\u2014") + '</td>';
-    h += '<td style="padding:8px 12px;text-align:center;font-weight:600;">' + (st.external != null ? st.external : "\u2014") + '</td>';
-    h += '<td style="padding:8px 12px;text-align:center;font-weight:800;color:' + (isFail ? "#DC2626" : "#059669") + ';">' + st.marks + '</td>';
+    var extCell = st.isRv && st.origExt != null ? st.origExt + ' &rarr; ' + st.external : (st.external != null ? st.external : "\u2014");
+    var rvBadge = st.isRv ? ' <span style="background:#059669;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;vertical-align:middle;">RV</span>' : "";
+    h += '<td style="padding:8px 12px;text-align:center;font-weight:600;">' + extCell + rvBadge + '</td>';
+    var totCell = st.isRv && st.origTotal != null ? st.origTotal + ' &rarr; ' + st.marks : st.marks;
+    h += '<td style="padding:8px 12px;text-align:center;font-weight:800;color:' + (isFail ? "#DC2626" : "#059669") + ';">' + totCell + '</td>';
     h += '<td style="padding:8px 12px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-weight:700;font-size:11px;background:' + (isFail ? "#FEE2E2" : "#D1FAE5") + ';color:' + (isFail ? "#991B1B" : "#065F46") + ';">' + (st.grade || "\u2014") + '</span></td>';
     h += '<td style="padding:8px 12px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:' + (ok ? "#D1FAE5;color:#065F46" : "#FEE2E2;color:#991B1B") + ';">' + (ok ? "PASS" : "FAIL") + '</span></td>';
     h += '</tr>';
@@ -1633,7 +1637,7 @@ function openSubjectModal(subjectCode) {
   h += '</tbody></table></div></div></div>';
   document.body.insertAdjacentHTML('beforeend', h);
 }
-function closeSubjectModal() { var el = document.getElementById('subj_modal_overlay'); if (el) el.remove(); }
+function closeSubjectModal() { var el = document.getElementById('subj_modal_overlay'); if (el) el.remove(); _openSubjCode = null; }
 
 $("an_batch_sel").addEventListener("change", e => {
   if (!e.target.value) {
