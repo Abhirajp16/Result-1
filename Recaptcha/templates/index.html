@@ -1598,7 +1598,7 @@ function openSubjectModal(subjectCode) {
   h += '<div style="flex:1;min-width:80px;text-align:center;padding:10px;border-radius:10px;background:#F0FDF4;"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#6B7280;letter-spacing:.05em;">Highest</div><div style="font-size:20px;font-weight:800;color:#059669;margin-top:2px;">' + hi + '</div></div>';
   h += '<div style="flex:1;min-width:80px;text-align:center;padding:10px;border-radius:10px;background:#FEF2F2;"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#6B7280;letter-spacing:.05em;">Lowest</div><div style="font-size:20px;font-weight:800;color:#DC2626;margin-top:2px;">' + lo + '</div></div>';
   h += '<div style="flex:1;min-width:80px;text-align:center;padding:10px;border-radius:10px;background:#EFF6FF;"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#6B7280;letter-spacing:.05em;">Average</div><div style="font-size:20px;font-weight:800;color:#2563EB;margin-top:2px;">' + avg + '</div></div>';
-  h += '<div style="flex:1;min-width:80px;text-align:center;padding:10px;border-radius:10px;background:#F5F3FF;"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#6B7280;letter-spacing:.05em;">Pass / Fail</div><div style="font-size:20px;font-weight:800;color:#7C3AED;margin-top:2px;">' + pass + ' / ' + fail + '</div></div>';
+  h += '<div style="flex:1;min-width:80px;text-align:center;padding:10px;border-radius:10px;background:#F5F3FF;cursor:pointer;" id="subj_pf_card" onclick="toggleSubjFailFilter()"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#6B7280;letter-spacing:.05em;">Pass / Fail</div><div style="font-size:20px;font-weight:800;color:#7C3AED;margin-top:2px;" id="subj_pf_val">' + pass + ' / ' + fail + '</div></div>';
   h += '</div>';
 
   h += '<div style="flex:1;overflow-y:auto;padding:0;">';
@@ -1636,8 +1636,47 @@ function openSubjectModal(subjectCode) {
   });
   h += '</tbody></table></div></div></div>';
   document.body.insertAdjacentHTML('beforeend', h);
+  _subjModalList = list;
+  _subjFailOnly = false;
 }
-function closeSubjectModal() { var el = document.getElementById('subj_modal_overlay'); if (el) el.remove(); _openSubjCode = null; }
+var _subjModalList = [];
+var _subjFailOnly = false;
+function closeSubjectModal() { var el = document.getElementById('subj_modal_overlay'); if (el) el.remove(); _openSubjCode = null; _subjModalList = []; _subjFailOnly = false; }
+function toggleSubjFailFilter() {
+  _subjFailOnly = !_subjFailOnly;
+  var overlay = document.getElementById('subj_modal_overlay');
+  if (!overlay || !_subjModalList.length) return;
+  var filtered = _subjFailOnly ? _subjModalList.filter(function(x) { return !x.pass; }) : _subjModalList;
+  var tbody = overlay.querySelector('tbody');
+  if (!tbody) return;
+  var html = '';
+  var rc = 0;
+  filtered.forEach(function(st, i) {
+    var isFail = !st.pass;
+    var bg = i % 2 === 0 ? "#fff" : "#F9FAFB";
+    var medal = "\u2014";
+    if (isFail) { bg = "#FFF5F5"; } else { rc++; medal = rc; if (rc === 1) { medal = "\uD83E\uDD47"; bg = "#ECFDF5"; } else if (rc === 2) { medal = "\uD83E\uDD48"; } else if (rc === 3) { medal = "\uD83E\uDD49"; } }
+    var ok = !isFail;
+    html += '<tr style="background:' + bg + ';">';
+    html += '<td style="padding:8px 12px;text-align:center;font-weight:800;color:' + (rc <= 3 ? (rc === 1 ? "#059669" : rc === 2 ? "#6B7280" : "#D97706") : "#6B7280") + ';">' + medal + '</td>';
+    html += '<td style="padding:8px 12px;font-family:ui-monospace,Consolas,monospace;font-weight:600;font-size:12px;">' + esc(st.usn) + '</td>';
+    html += '<td style="padding:8px 12px;color:#374151;">' + esc(st.name) + '</td>';
+    html += '<td style="padding:8px 12px;text-align:center;font-weight:600;">' + (st.internal != null ? st.internal : "\u2014") + '</td>';
+    var extCell = st.isRv && st.origExt != null ? st.origExt + ' &rarr; ' + st.external : (st.external != null ? st.external : "\u2014");
+    var rvBadge = st.isRv ? ' <span style="background:#059669;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;vertical-align:middle;">RV</span>' : "";
+    html += '<td style="padding:8px 12px;text-align:center;font-weight:600;">' + extCell + rvBadge + '</td>';
+    var totCell = st.isRv && st.origTotal != null ? st.origTotal + ' &rarr; ' + st.marks : st.marks;
+    html += '<td style="padding:8px 12px;text-align:center;font-weight:800;color:' + (isFail ? "#DC2626" : "#059669") + ';">' + totCell + '</td>';
+    html += '<td style="padding:8px 12px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-weight:700;font-size:11px;background:' + (isFail ? "#FEE2E2" : "#D1FAE5") + ';color:' + (isFail ? "#991B1B" : "#065F46") + ';">' + (st.grade || "\u2014") + '</span></td>';
+    html += '<td style="padding:8px 12px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:' + (ok ? "#D1FAE5;color:#065F46" : "#FEE2E2;color:#991B1B") + ';">' + (ok ? "PASS" : "FAIL") + '</span></td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+  var pfCard = document.getElementById('subj_pf_card');
+  if (pfCard) pfCard.style.background = _subjFailOnly ? '#FEE2E2' : '#F5F3FF';
+  var pfVal = document.getElementById('subj_pf_val');
+  if (pfVal) pfVal.textContent = _subjFailOnly ? filtered.length + ' failed' : _subjModalList.filter(function(x){return x.pass;}).length + ' / ' + _subjModalList.filter(function(x){return !x.pass;}).length;
+}
 
 $("an_batch_sel").addEventListener("change", e => {
   if (!e.target.value) {
@@ -1687,6 +1726,7 @@ socket.on("batch-results", data => {
   batchStudents[data.batch.id] = data.students;
   if (currentBatch === data.batch.id) renderAnalytics(data.batch, data.students);
   applyBrowseFilters();
+  if (_openSubjCode && currentBatch === data.batch.id) { closeSubjectModal(); openSubjectModal(_openSubjCode); }
 });
 
 /* ---------------- analytics rendering ---------------- */
@@ -2240,6 +2280,7 @@ function ordinal(n) {
 
 /* ---- SGPA Rankings Modal ---- */
 let sgpaModalData = [];
+let _openSubjCode = null;
 function openSgpaModal() {
   if (!sgpaModalData.length) return;
   let h = '<div id="sgpa_modal_overlay" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.4);backdrop-filter:blur(4px);" onclick="if(event.target===this)closeSgpaModal()">';
