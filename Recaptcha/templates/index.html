@@ -7,6 +7,7 @@
 <script src="/static/tailwind.js"></script>
 <script src="/static/socket.io.min.js"></script>
 <script src="/static/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
 :root {
   --pine: #123D2E;
@@ -490,6 +491,7 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
       <button class="tab-btn" data-tab="reval">Revaluation</button>
       <button class="tab-btn" data-tab="analytics">Analytics</button>
       <button class="tab-btn" data-tab="browse">Browse Records</button>
+      <button class="tab-btn" data-tab="cgpa">SGPA & CGPA Cal</button>
     </nav>
   </div>
 </header>
@@ -733,6 +735,62 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
       </div>
     </div>
     <div id="sr_result_area"></div>
+  </div>
+
+</section>
+
+<!-- ================= SGPA & CGPA CALCULATOR ================= -->
+<section id="tab-cgpa" class="tab-page">
+
+  <div class="panel">
+    <h2><span class="h2-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="12" y2="14"/></svg></span>SGPA & CGPA Calculator</h2>
+
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;">
+      <div style="flex:1;min-width:220px;">
+        <label class="lbl">Select Batch</label>
+        <select id="cgpa_batch_sel" style="width:100%;padding:8px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;">
+          <option value="">-- select a saved batch --</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="cgpa_upload_area" style="border:2px dashed #D1D5DB;border-radius:12px;padding:40px;text-align:center;cursor:pointer;transition:all .2s;background:#FAFBFC;" onmouseover="this.style.borderColor='#059669'" onmouseout="this.style.borderColor='#D1D5DB'">
+      <div style="font-size:36px;margin-bottom:8px;">&#128247;</div>
+      <div style="font-size:14px;font-weight:600;color:#374151;">Click or drag to upload semester table image</div>
+      <div style="font-size:12px;color:#9CA3AF;margin-top:4px;">Supports JPG, PNG</div>
+      <input type="file" id="cgpa_file_input" accept="image/*" style="display:none;">
+    </div>
+
+    <div id="cgpa_image_preview" style="display:none;margin-top:14px;text-align:center;">
+      <img id="cgpa_preview_img" style="max-width:100%;max-height:300px;border-radius:8px;border:1px solid #E5E7EB;" />
+      <div id="cgpa_ocr_status" style="margin-top:8px;font-size:12px;color:#6B7280;"></div>
+    </div>
+
+    <div id="cgpa_subject_table" style="display:none;margin-top:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-size:14px;font-weight:700;color:#111827;">Extracted Subjects</div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn ghost" onclick="cgpaAddSubject()" style="font-size:12px;">+ Add Row</button>
+          <button class="btn" onclick="cgpaCalcSgpa()" style="background:linear-gradient(135deg,#059669,#065F46);color:#fff;border-color:transparent;font-size:12px;">Calculate SGPA</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;" id="cgpa_table">
+          <thead><tr style="background:linear-gradient(135deg,#1C7A5E,#059669);">
+            <th style="padding:8px 10px;color:#fff;font-size:10px;text-transform:uppercase;width:40px;">#</th>
+            <th style="padding:8px 10px;color:#fff;font-size:10px;text-transform:uppercase;">Course Code</th>
+            <th style="padding:8px 10px;color:#fff;font-size:10px;text-transform:uppercase;">Subject Name</th>
+            <th style="padding:8px 10px;color:#fff;font-size:10px;text-transform:uppercase;width:70px;">Credits</th>
+            <th style="padding:8px 10px;color:#fff;font-size:10px;text-transform:uppercase;width:90px;">Marks</th>
+            <th style="padding:8px 10px;color:#fff;font-size:10px;text-transform:uppercase;width:90px;">Grade</th>
+            <th style="padding:8px 10px;color:#fff;font-size:10px;text-transform:uppercase;width:40px;"></th>
+          </tr></thead>
+          <tbody id="cgpa_tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="cgpa_result" style="display:none;margin-top:16px;"></div>
   </div>
 
 </section>
@@ -1066,7 +1124,7 @@ $("db_save_btn").addEventListener("click", () => {
 });
 
 /* ---------------- socket events ---------------- */
-socket.on("connect", () => socket.emit("get-db-status"));
+socket.on("connect", () => { socket.emit("get-db-status"); socket.emit("get-batches"); });
 
 socket.on("db-status", data => {
   const b = $("db_badge");
@@ -1518,6 +1576,7 @@ socket.on("batches", data => {
     return;
   }
   $("stat_batches").textContent = batches.length;
+  if (typeof populateCgpaBatchSel === "function") populateCgpaBatchSel();
 
   const sel = $("an_batch_sel");
   const prev = sel.value;
@@ -1744,15 +1803,19 @@ function gradePoint(total) {
 }
 
 /* SGPA from total marks using VTU grade points.
-   Uses reval'd grade if available, falls back to computed grade. */
+   SGPA = Σ(Credits × GP) / Σ(Credits) — excludes F-grade courses. */
 function studentSGPA(s) {
   if (s.sgpa != null) return s.sgpa;
-  const pts = (s.subjects || []).map(sub => {
-    if (sub.is_revaluated && sub.final_grade) return gradePoint(sub.final_total != null ? sub.final_total : sub.total);
-    return gradePoint(sub.total);
-  }).filter(v => v !== null);
-  if (!pts.length) return null;
-  return pts.reduce((a, b) => a + b, 0) / pts.length;
+  let totalCr = 0, totalPts = 0;
+  (s.subjects || []).forEach(sub => {
+    const cr = sub.credits || 0;
+    const total = (sub.is_revaluated && sub.final_total != null) ? sub.final_total : sub.total;
+    const gp = gradePoint(total);
+    if (gp === null || gp === 0) return; /* exclude F-grade (gp=0) */
+    totalCr += cr;
+    totalPts += cr * gp;
+  });
+  return totalCr > 0 ? totalPts / totalCr : null;
 }
 
 function renderAnalytics(batch, students) {
@@ -2318,6 +2381,187 @@ function closeSgpaModal() { const el = document.getElementById('sgpa_modal_overl
 
 
 
+/* ================= SGPA & CGPA CALCULATOR ================= */
+(function() {
+  var cgpaSubjects = [];
+  var uploadArea = $("cgpa_upload_area");
+  var fileInput = $("cgpa_file_input");
+
+  /* --- Batch selector --- */
+  window.populateCgpaBatchSel = function() {
+    var sel = $("cgpa_batch_sel");
+    sel.innerHTML = '<option value="">-- select a saved batch --</option>';
+    (batches || []).forEach(function(b) {
+      var o = document.createElement("option");
+      o.value = b.id;
+      o.textContent = (b.department || "") + " Sem " + (b.semester || "") + " (" + (b.student_count || 0) + " students)";
+      sel.appendChild(o);
+    });
+  };
+  window.populateCgpaBatchSel();
+
+  /* --- Image upload & OCR --- */
+
+  uploadArea.addEventListener("click", function() { fileInput.click(); });
+  uploadArea.addEventListener("dragover", function(e) { e.preventDefault(); uploadArea.style.borderColor = "#059669"; uploadArea.style.background = "#F0FDF4"; });
+  uploadArea.addEventListener("dragleave", function() { uploadArea.style.borderColor = "#D1D5DB"; uploadArea.style.background = "#FAFBFC"; });
+  uploadArea.addEventListener("drop", function(e) {
+    e.preventDefault(); uploadArea.style.borderColor = "#D1D5DB"; uploadArea.style.background = "#FAFBFC";
+    if (e.dataTransfer.files.length) processImage(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener("change", function() { if (fileInput.files.length) processImage(fileInput.files[0]); });
+
+  function processImage(file) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      $("cgpa_preview_img").src = e.target.result;
+      $("cgpa_image_preview").style.display = "block";
+      $("cgpa_ocr_status").textContent = "Reading image with OCR...";
+      extractTextFromImage(e.target.result);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function extractTextFromImage(imgSrc) {
+    if (typeof Tesseract === "undefined") {
+      $("cgpa_ocr_status").textContent = "OCR library not loaded. Enter subjects manually.";
+      $("cgpa_subject_table").style.display = "block";
+      return;
+    }
+    Tesseract.recognize(imgSrc, "eng", { logger: function(m) { if (m.status === "recognizing text") $("cgpa_ocr_status").textContent = "OCR: " + Math.round(m.progress * 100) + "%"; } })
+      .then(function(result) {
+        $("cgpa_ocr_status").textContent = "OCR complete. Parsing table...";
+        var text = result.data.text;
+        var lines = text.split("\n").map(function(l) { return l.trim(); }).filter(Boolean);
+        parseTable(lines);
+      })
+      .catch(function() {
+        $("cgpa_ocr_status").textContent = "OCR failed. Enter subjects manually.";
+        $("cgpa_subject_table").style.display = "block";
+      });
+  }
+
+  function parseTable(lines) {
+    cgpaSubjects = [];
+    var codeRe = /\b([A-Z]{2,3}[A-Z0-9]{3,5}[A-Z0-9]?)\b/;
+    var creditRe = /\b(\d)\s*$/;
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (/^(TOTAL|Sl|Sl\.|#|Course)/i.test(line)) continue;
+      var codeMatch = line.match(codeRe);
+      if (!codeMatch) continue;
+      var code = codeMatch[1];
+      if (/^\d+$/.test(code) || code.length < 4) continue;
+      var parts = line.split(/\s{2,}|\s*\|\s*/);
+      var name = "";
+      var credits = 0;
+      for (var j = 0; j < parts.length; j++) {
+        var p = parts[j].trim();
+        if (/^[A-Z]{2,3}[A-Z0-9]{3,5}[A-Z0-9]?$/i.test(p) && p.length >= 4) continue;
+        if (/^\d+$/.test(p) && parseInt(p) <= 10 && parseInt(p) > 0) { credits = parseInt(p); continue; }
+        if (p.length > 3 && !/^\d+$/.test(p) && !/^(L|T|P|Duration|CIE|SEE|Total|Credits|IPCC|PCC|PEC|OEC|PROJ|PCCL|AEC|SDC|MC)$/i.test(p)) {
+          name = p;
+        }
+      }
+      if (code && credits >= 0) {
+        cgpaSubjects.push({ code: code, name: name || code, credits: credits });
+      }
+    }
+    renderCgpaTable();
+  }
+
+  window.cgpaAddSubject = function() {
+    cgpaSubjects.push({ code: "", name: "", credits: 0 });
+    renderCgpaTable();
+  };
+
+  window.cgpaRemoveSubject = function(idx) {
+    cgpaSubjects.splice(idx, 1);
+    renderCgpaTable();
+  };
+
+  function renderCgpaTable() {
+    var tbody = $("cgpa_tbody");
+    $("cgpa_subject_table").style.display = "block";
+    $("cgpa_result").style.display = "none";
+    var h = "";
+    cgpaSubjects.forEach(function(s, i) {
+      var bg = i % 2 === 0 ? "#fff" : "#F9FAFB";
+      h += '<tr style="background:' + bg + ';border-bottom:1px solid #F3F4F6;">';
+      h += '<td style="padding:6px 10px;text-align:center;font-weight:700;color:#6B7280;">' + (i + 1) + '</td>';
+      h += '<td style="padding:6px 10px;"><input type="text" value="' + esc(s.code) + '" onchange="cgpaSubjects[' + i + '].code=this.value" style="width:100%;border:1px solid #E5E7EB;border-radius:6px;padding:5px 8px;font-size:12px;font-family:ui-monospace,Consolas,monospace;font-weight:600;"></td>';
+      h += '<td style="padding:6px 10px;"><input type="text" value="' + esc(s.name) + '" onchange="cgpaSubjects[' + i + '].name=this.value" style="width:100%;border:1px solid #E5E7EB;border-radius:6px;padding:5px 8px;font-size:12px;"></td>';
+      h += '<td style="padding:6px 10px;"><input type="number" value="' + s.credits + '" min="0" max="10" onchange="cgpaSubjects[' + i + '].credits=parseInt(this.value)||0" style="width:100%;border:1px solid #E5E7EB;border-radius:6px;padding:5px 8px;font-size:12px;text-align:center;"></td>';
+      h += '<td style="padding:6px 10px;"><input type="number" id="cgpa_marks_' + i + '" min="0" max="100" placeholder="Marks" style="width:100%;border:1px solid #E5E7EB;border-radius:6px;padding:5px 8px;font-size:12px;text-align:center;"></td>';
+      h += '<td style="padding:6px 10px;"><input type="text" id="cgpa_grade_' + i + '" placeholder="Grade" style="width:100%;border:1px solid #E5E7EB;border-radius:6px;padding:5px 8px;font-size:12px;text-align:center;" readonly></td>';
+      h += '<td style="padding:6px 10px;text-align:center;"><button onclick="cgpaRemoveSubject(' + i + ')" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:16px;">&times;</button></td>';
+      h += '</tr>';
+    });
+    tbody.innerHTML = h;
+  }
+
+  window.cgpaCalcSgpa = function() {
+    var GRADE_POINTS = { O:10, "A+":9, A:8, "B+":7, B:6, C:5, P:4, F:0 };
+    var gradeOf = function(m) { m = Number(m); if (m >= 90) return "O"; if (m >= 80) return "A+"; if (m >= 70) return "A"; if (m >= 60) return "B+"; if (m >= 55) return "B"; if (m >= 50) return "C"; if (m >= 40) return "P"; return "F"; };
+
+    var totalCredits = 0, totalPoints = 0, allPass = true;
+    var passCredits = 0, passPoints = 0;
+    var rows = [];
+    cgpaSubjects.forEach(function(s, i) {
+      var marksEl = document.getElementById("cgpa_marks_" + i);
+      var gradeEl = document.getElementById("cgpa_grade_" + i);
+      var marks = marksEl ? Number(marksEl.value) : 0;
+      var grade = gradeOf(marks);
+      if (gradeEl) gradeEl.value = grade;
+      var gp = GRADE_POINTS[grade] !== undefined ? GRADE_POINTS[grade] : 0;
+      var cr = s.credits || 0;
+      totalCredits += cr;
+      totalPoints += gp * cr;
+      if (grade !== "F") {
+        passCredits += cr;
+        passPoints += gp * cr;
+      } else {
+        allPass = false;
+      }
+      rows.push({ code: s.code, name: s.name, credits: cr, marks: marks, grade: grade, gp: gp });
+    });
+
+    var sgpa = totalCredits > 0 ? (totalPoints / totalCredits).toFixed(2) : "0.00";
+    var cgpa = passCredits > 0 ? (passPoints / passCredits).toFixed(2) : "0.00";
+    var resH = '<div style="background:linear-gradient(135deg,#1C7A5E,#123D2E);border-radius:14px;padding:22px 28px;color:#fff;">';
+    resH += '<div style="font-size:16px;font-weight:800;margin-bottom:12px;">Result</div>';
+    resH += '<div style="display:flex;gap:16px;flex-wrap:wrap;">';
+    resH += '<div style="background:rgba(255,255,255,.15);border-radius:10px;padding:14px 20px;text-align:center;min-width:100px;"><div style="font-size:10px;text-transform:uppercase;opacity:.8;">SGPA</div><div style="font-size:28px;font-weight:800;margin-top:2px;">' + sgpa + '</div></div>';
+    resH += '<div style="background:rgba(255,255,255,.15);border-radius:10px;padding:14px 20px;text-align:center;min-width:100px;"><div style="font-size:10px;text-transform:uppercase;opacity:.8;">CGPA</div><div style="font-size:28px;font-weight:800;margin-top:2px;">' + cgpa + '</div></div>';
+    resH += '<div style="background:rgba(255,255,255,.15);border-radius:10px;padding:14px 20px;text-align:center;min-width:100px;"><div style="font-size:10px;text-transform:uppercase;opacity:.8;">Total Credits</div><div style="font-size:28px;font-weight:800;margin-top:2px;">' + totalCredits + '</div></div>';
+    resH += '<div style="background:rgba(255,255,255,.15);border-radius:10px;padding:14px 20px;text-align:center;min-width:100px;"><div style="font-size:10px;text-transform:uppercase;opacity:.8;">Status</div><div style="font-size:18px;font-weight:800;margin-top:2px;">' + (allPass ? "PASS" : "FAIL") + '</div></div>';
+    resH += '</div>';
+    resH += '<div style="margin-top:14px;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;color:#fff;"><thead><tr>';
+    resH += '<th style="padding:6px 10px;text-align:left;opacity:.8;font-size:10px;">Code</th>';
+    resH += '<th style="padding:6px 10px;text-align:left;opacity:.8;font-size:10px;">Subject</th>';
+    resH += '<th style="padding:6px 10px;text-align:center;opacity:.8;font-size:10px;">Credits</th>';
+    resH += '<th style="padding:6px 10px;text-align:center;opacity:.8;font-size:10px;">Marks</th>';
+    resH += '<th style="padding:6px 10px;text-align:center;opacity:.8;font-size:10px;">Grade</th>';
+    resH += '<th style="padding:6px 10px;text-align:center;opacity:.8;font-size:10px;">Grade Point</th>';
+    resH += '<th style="padding:6px 10px;text-align:center;opacity:.8;font-size:10px;">Credits x GP</th>';
+    resH += '</tr></thead><tbody>';
+    rows.forEach(function(r) {
+      var isF = r.grade === "F";
+      resH += '<tr style="background:rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.1);">';
+      resH += '<td style="padding:6px 10px;font-family:monospace;font-weight:600;">' + esc(r.code) + '</td>';
+      resH += '<td style="padding:6px 10px;">' + esc(r.name) + '</td>';
+      resH += '<td style="padding:6px 10px;text-align:center;">' + r.credits + '</td>';
+      resH += '<td style="padding:6px 10px;text-align:center;font-weight:700;">' + r.marks + '</td>';
+      resH += '<td style="padding:6px 10px;text-align:center;"><span style="background:' + (isF ? "#DC2626" : "rgba(255,255,255,.2)") + ';padding:2px 8px;border-radius:4px;font-weight:700;">' + r.grade + '</span></td>';
+      resH += '<td style="padding:6px 10px;text-align:center;font-weight:700;">' + r.gp + '</td>';
+      resH += '<td style="padding:6px 10px;text-align:center;font-weight:700;">' + (r.credits * r.gp) + '</td>';
+      resH += '</tr>';
+    });
+    resH += '</tbody></table></div></div>';
+    $("cgpa_result").innerHTML = resH;
+    $("cgpa_result").style.display = "block";
+  };
+})();
 
 </script>
 </body>
