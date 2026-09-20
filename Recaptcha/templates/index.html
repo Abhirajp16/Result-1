@@ -1632,8 +1632,8 @@ function openSubjectModal(subjectCode) {
       var isRv = sub.is_revaluated === true;
       var t = (isRv && sub.final_total != null) ? sub.final_total : sub.total;
       var bestResult = (isRv && sub.final_result) ? sub.final_result : (sub.result || "");
-      var pass = bestResult !== "F";
-      list.push({ usn: s.usn || "", name: s.name || "", internal: sub.internal, external: sub.external, marks: t, grade: (isRv && sub.final_grade) ? sub.final_grade : sub.grade || "F", pass: pass, isRv: isRv, origExt: sub.original_external, origTotal: sub.original_total, origResult: sub.original_result });
+      var pass = bestResult === "P";
+      list.push({ usn: s.usn || "", name: s.name || "", internal: sub.internal, external: sub.external, marks: t, grade: (isRv && sub.final_grade) ? sub.final_grade : sub.grade || "F", pass: pass, result: bestResult, isRv: isRv, origExt: sub.original_external, origTotal: sub.original_total, origResult: sub.original_result });
     });
   });
   if (!list.length) return;
@@ -1690,7 +1690,9 @@ function openSubjectModal(subjectCode) {
     var totCell = st.isRv && st.origTotal != null ? st.origTotal + ' &rarr; ' + st.marks : st.marks;
     h += '<td style="padding:8px 12px;text-align:center;font-weight:800;color:' + (isFail ? "#DC2626" : "#059669") + ';">' + totCell + '</td>';
     h += '<td style="padding:8px 12px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-weight:700;font-size:11px;background:' + (isFail ? "#FEE2E2" : "#D1FAE5") + ';color:' + (isFail ? "#991B1B" : "#065F46") + ';">' + (st.grade || "\u2014") + '</span></td>';
-    h += '<td style="padding:8px 12px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:' + (ok ? "#D1FAE5;color:#065F46" : "#FEE2E2;color:#991B1B") + ';">' + (ok ? "PASS" : "FAIL") + '</span></td>';
+    var resLabel = st.result === "A" ? "ABSENT" : (st.result === "P" ? "PASS" : "FAIL");
+    var resBg = st.result === "P" ? "#D1FAE5;color:#065F46" : (st.result === "A" ? "#FEF3C7;color:#92400E" : "#FEE2E2;color:#991B1B");
+    h += '<td style="padding:8px 12px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:' + resBg + ';">' + resLabel + '</span></td>';
     h += '</tr>';
   });
   h += '</tbody></table></div></div></div>';
@@ -1727,7 +1729,9 @@ function toggleSubjFailFilter() {
     var totCell = st.isRv && st.origTotal != null ? st.origTotal + ' &rarr; ' + st.marks : st.marks;
     html += '<td style="padding:8px 12px;text-align:center;font-weight:800;color:' + (isFail ? "#DC2626" : "#059669") + ';">' + totCell + '</td>';
     html += '<td style="padding:8px 12px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-weight:700;font-size:11px;background:' + (isFail ? "#FEE2E2" : "#D1FAE5") + ';color:' + (isFail ? "#991B1B" : "#065F46") + ';">' + (st.grade || "\u2014") + '</span></td>';
-    html += '<td style="padding:8px 12px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:' + (ok ? "#D1FAE5;color:#065F46" : "#FEE2E2;color:#991B1B") + ';">' + (ok ? "PASS" : "FAIL") + '</span></td>';
+    var resLabel2 = st.result === "A" ? "ABSENT" : (st.result === "P" ? "PASS" : "FAIL");
+    var resBg2 = st.result === "P" ? "#D1FAE5;color:#065F46" : (st.result === "A" ? "#FEF3C7;color:#92400E" : "#FEE2E2;color:#991B1B");
+    html += '<td style="padding:8px 12px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:' + resBg2 + ';">' + resLabel2 + '</span></td>';
     html += '</tr>';
   });
   tbody.innerHTML = html;
