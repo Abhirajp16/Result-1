@@ -419,6 +419,55 @@ def compute_sgpa(students, credits_map):
     return students
 
 
+def compute_yearly_cgpa(students_sem1, students_sem2, credits_map_sem1, credits_map_sem2):
+    """Compute yearly CGPA combining two semesters.
+    CGPA = Σ(Credits × GP excluding F) / Σ(Credits excluding F) across both semesters."""
+    combined = {}
+    for s in students_sem1 + students_sem2:
+        usn = s.get("usn", "")
+        if usn not in combined:
+            combined[usn] = {"usn": usn, "name": s.get("name", ""), "subjects": []}
+        combined[usn]["subjects"].extend(s.get("subjects", []) or [])
+
+    credits_map = {}
+    credits_map.update(credits_map_sem1)
+    credits_map.update(credits_map_sem2)
+
+    results = []
+    for usn, data in combined.items():
+        pass_credits = 0
+        pass_points = 0
+        total_credits = 0
+        total_points = 0
+        for subj in data["subjects"]:
+            code = subj.get("code", "")
+            cr = credits_map.get(code)
+            if cr is None:
+                continue
+            try:
+                cr = float(cr)
+            except (TypeError, ValueError):
+                continue
+            grade = subj.get("final_grade") if subj.get("is_revaluated") and subj.get("final_grade") else subj.get("grade", "")
+            if not grade:
+                if subj.get("is_revaluated") and subj.get("final_total") is not None:
+                    best_total = subj["final_total"]
+                elif subj.get("is_revaluated") and subj.get("final_marks") is not None and subj.get("internal") is not None:
+                    best_total = subj["internal"] + subj["final_marks"]
+                else:
+                    best_total = subj.get("total")
+                grade = _grade(best_total) if best_total is not None else ""
+            gp = GRADE_POINTS.get(grade, 0)
+            total_credits += cr
+            total_points += gp * cr
+            if gp > 0:
+                pass_credits += cr
+                pass_points += gp * cr
+        cgpa = round(pass_points / pass_credits, 2) if pass_credits > 0 else None
+        results.append({"usn": usn, "name": data["name"], "cgpa": cgpa})
+    return results
+
+
 def _grade(marks):
     """Map total marks to a VTU grade."""
     try:

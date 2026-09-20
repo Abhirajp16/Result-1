@@ -812,22 +812,93 @@ def save_credits_handler(data):
         students = db.fetch_students(batch_id)
         credits_map = {k: float(v) for k, v in credits.items()}
         students = db.compute_sgpa(students, credits_map)
-        # Store SGPA back to each student document
+        # Store SGPA & CGPA back to each student document
         for s in students:
-            if s.get("sgpa") is not None and s.get("id"):
+            if s.get("id"):
                 try:
-                    from supabase import create_client
-                    db.client.table("student_results").update(
-                        {"sgpa": s["sgpa"]}
-                    ).eq("id", s["id"]).execute()
+                    update_fields = {}
+                    if s.get("sgpa") is not None:
+                        update_fields["sgpa"] = s["sgpa"]
+                    if s.get("cgpa") is not None:
+                        update_fields["cgpa"] = s["cgpa"]
+                    if update_fields:
+                        db.client.table("student_results").update(
+                            update_fields
+                        ).eq("id", s["id"]).execute()
                 except Exception:
                     pass
         avg_sgpa = round(sum(s["sgpa"] for s in students if s.get("sgpa") is not None) /
                          max(1, sum(1 for s in students if s.get("sgpa") is not None)), 2)
+        avg_cgpa = round(sum(s["cgpa"] for s in students if s.get("cgpa") is not None) /
+                         max(1, sum(1 for s in students if s.get("cgpa") is not None)), 2)
         emit("credits-saved", {"ok": True, "batch_id": batch_id,
-                               "avg_sgpa": avg_sgpa, "student_count": len(students)})
+                               "avg_sgpa": avg_sgpa, "avg_cgpa": avg_cgpa,
+                               "student_count": len(students)})
     else:
         emit("credits-saved", {"ok": False, "error": err})
+
+
+@socketio.on("compute-yearly-cgpa")
+def compute_yearly_cgpa_handler(data):
+    batch_id = str(data.get("batch_id", ""))
+    if not batch_id or not db.is_connected():
+        emit("yearly-cgpa-result", {"ok": False, "error": "Not connected"})
+        return
+    batch = db.fetch_batch(batch_id)
+    if not batch:
+        emit("yearly-cgpa-result", {"ok": False, "error": "Batch not found"})
+        return
+    sem = batch.get("semester")
+    scheme = batch.get("scheme", "")
+    if not sem:
+        emit("yearly-cgpa-result", {"ok": False, "error": "No semester info"})
+        return
+    # Pair semesters: 1-2, 3-4, 5-6
+    sem_num = int(sem) if str(sem).isdigit() else 0
+    if sem_num <= 0:
+        emit("yearly-cgpa-result", {"ok": False, "error": "Invalid semester"})
+        return
+    paired_sem = sem_num - 1 if sem_num % 2 == 0 else sem_num + 1
+    # Find paired batch
+    all_batches = db.fetch_batches()
+    paired_batch = None
+    for b in all_batches:
+        b_sem = int(b.get("semester", 0)) if str(b.get("semester", "")).isdigit() else 0
+        b_scheme = b.get("scheme", "")
+        if b_sem == paired_sem and b_scheme == scheme and b.get("id") != batch_id:
+            paired_batch = b
+            break
+    if not paired_batch:
+        emit("yearly-cgpa-result", {"ok": False, "error": f"Sem {paired_sem} batch not found. Need both semesters for yearly CGPA."})
+        return
+    # Get credits for both batches
+    credits1 = db.get_credits(batch_id)
+    credits2 = db.get_credits(paired_batch["id"])
+    if not credits1 or not credits2:
+        emit("yearly-cgpa-result", {"ok": False, "error": f"Missing credits for sem {sem} or sem {paired_sem}"})
+        return
+    # Fetch students from both
+    _, students1 = db.fetch_batch_with_students(batch_id)
+    _, students2 = db.fetch_batch_with_students(paired_batch["id"])
+    credits_map1 = {k: float(v) for k, v in credits1.items()}
+    credits_map2 = {k: float(v) for k, v in credits2.items()}
+    yearly = db.compute_yearly_cgpa(students1, students2, credits_map1, credits_map2)
+    # Store CGPA in both batches
+    for entry in yearly:
+        for bid in [batch_id, paired_batch["id"]]:
+            b_studs = students1 if bid == batch_id else students2
+            for s in b_studs:
+                if s.get("usn") == entry["usn"] and s.get("id") and entry["cgpa"] is not None:
+                    try:
+                        db.client.table("student_results").update(
+                            {"cgpa": entry["cgpa"]}
+                        ).eq("id", s["id"]).execute()
+                    except Exception:
+                        pass
+    year_label = f"Year {(sem_num + 1) // 2}"
+    emit("yearly-cgpa-result", {"ok": True, "batch_id": batch_id,
+                                "year": year_label, "cgpa_data": yearly,
+                                "sem1": str(paired_sem), "sem2": str(sem)})
 
 
 @socketio.on("get-credits")

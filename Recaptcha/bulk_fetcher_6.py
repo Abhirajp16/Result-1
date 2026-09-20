@@ -266,7 +266,6 @@ def scrape(html):
                     entry["RV Marks"] = rv_marks
                     entry["RV Result"] = cell("RV Result") or ""
                     entry["Final Result"] = cell("Final Result") or cell("Result After RV") or cell("Result")
-                    # TOTAL = INTERNAL + REVALUATION EXTERNAL
                     try:
                         int_val = int(entry["Internal Marks"])
                         rv_ext = int(rv_marks)
