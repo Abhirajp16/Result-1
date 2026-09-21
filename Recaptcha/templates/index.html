@@ -1844,13 +1844,17 @@ function renderAnalytics(batch, students) {
   const byUsn = sorted.map(s => s.percentage ?? 0);
   const usnLabels = sorted.map(s => s.usn);
 
-  const bands = { Distinction: 0, "First Class": 0, Pass: 0, Fail: 0 };
+  const bands = { Pass: 0, Fail: 0, Absent: 0 };
   students.forEach(s => {
-    const p = s.percentage ?? 0;
-    if (p >= 70) bands.Distinction++;
-    else if (p >= 60) bands["First Class"]++;
-    else if (p >= 40) bands.Pass++;
-    else bands.Fail++;
+    let hasF = false, hasA = false;
+    (s.subjects || []).forEach(sub => {
+      const r = (sub.is_revaluated && sub.final_result) ? sub.final_result : sub.result;
+      if (r === "F") hasF = true;
+      else if (r === "A") hasA = true;
+    });
+    if (hasF) bands.Fail++;
+    else if (hasA) bands.Absent++;
+    else bands.Pass++;
   });
 
   const subjMap = {};
@@ -1877,7 +1881,7 @@ function renderAnalytics(batch, students) {
   destroyChart("chart_pie");
   charts.chart_pie = new Chart($("chart_pie"), {
     type: "pie",
-    data: { labels: Object.keys(bands), datasets: [{ data: Object.values(bands), backgroundColor: [accent, warn, "#5b8def", err], borderWidth: 3, borderColor: "#fff" }] },
+    data: { labels: Object.keys(bands), datasets: [{ data: Object.values(bands), backgroundColor: ["#10B981", "#E5484D", "#F59E0B"], borderWidth: 3, borderColor: "#fff" }] },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { usePointStyle: true, pointStyle: "circle", padding: 16 } } } }
   });
 
