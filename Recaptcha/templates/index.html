@@ -570,16 +570,6 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
     </div>
   </div>
 
-  <div class="panel" id="credits_panel" style="display:none;">
-    <h2 style="font-size:14px;font-weight:700;margin-bottom:12px;">Subject Credits</h2>
-    <div id="credits_row" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;"></div>
-    <div style="margin-top:12px;display:flex;align-items:center;gap:10px;">
-      <select id="credits_batch_sel" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fff;"></select>
-      <button class="btn sm" id="credits_save_btn">Save Credits & SGPA</button>
-      <span id="credits_status" style="color:#6b7280;font-size:12px;"></span>
-    </div>
-  </div>
-
   </div>
 </section>
 
@@ -760,8 +750,8 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
     <h3 style="margin:0 0 4px;">Save to Database</h3>
     <p style="color:var(--muted);font-size:13px;margin:0 0 18px;">Archives the current fetch into MongoDB — pick an existing batch to merge into, or create a new one.</p>
     <div class="row" style="margin-bottom:14px;">
-      <div><label class="lbl">Store into</label>
-        <select id="db_batch_sel"><option value="">— create a new batch —</option></select>
+      <div style="max-width:280px;"><label class="lbl">Store into</label>
+        <select id="db_batch_sel" style="font-size:12px;padding:8px 10px;"><option value="">— create a new batch —</option></select>
       </div>
     </div>
     <div class="row" style="margin-bottom:14px;">
@@ -1154,8 +1144,6 @@ socket.on("download-ready", () => {
   $("actions_panel").style.display = "block";
   $("download_btn").style.display = "inline-flex";
   $("save_db_btn").style.display = "inline-flex";
-  $("credits_panel").style.display = "block";
-  socket.emit("get-fetched-subjects");
   logMsg("[Info] Excel ready for download.\n");
   socket.emit("get-db-status", {}, () => {});
 });
@@ -1168,61 +1156,11 @@ socket.on("save-to-db-complete", data => {
   loadBatches();
 });
 
-/* ── Credits ──────────────────────────────────────────────── */
-let creditsData = {};
-
-socket.on("fetched-subjects", (d) => {
-  const row = $("credits_row");
-  row.innerHTML = "";
-  (d.subjects || []).forEach(code => {
-    const wrap = document.createElement("div");
-    wrap.style.cssText = "display:flex;align-items:center;gap:4px;";
-    const lbl = document.createElement("span");
-    lbl.textContent = code;
-    lbl.style.cssText = "font-size:13px;font-weight:600;font-family:monospace;white-space:nowrap;";
-    const inp = document.createElement("input");
-    inp.type = "number"; inp.min = "0"; inp.max = "10"; inp.step = "0.5"; inp.value = "";
-    inp.className = "credit-input"; inp.dataset.code = code;
-    inp.style.cssText = "width:56px;padding:7px 6px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;text-align:center;background:#fff;outline:none;";
-    inp.addEventListener("focus", () => inp.style.borderColor = "#059669");
-    inp.addEventListener("blur", () => inp.style.borderColor = "#d1d5db");
-    wrap.appendChild(lbl);
-    wrap.appendChild(inp);
-    row.appendChild(wrap);
-  });
-});
-
-socket.on("fetched-subjects", () => {
-  const cs = $("credits_batch_sel");
-  cs.innerHTML = '<option value="">— select batch —</option>';
-  batches.forEach(b => {
-    const o = document.createElement("option");
-    o.value = b.id;
-    o.textContent = (b.department || "?") + " Sem " + (b.semester || "?") + " (" + (b.student_count || 0) + ")";
-    cs.appendChild(o);
-  });
-});
-
-$("credits_save_btn").addEventListener("click", () => {
-  document.querySelectorAll(".credit-input").forEach(inp => {
-    const v = parseFloat(inp.value);
-    if (!isNaN(v) && v > 0) creditsData[inp.dataset.code] = v;
-  });
-  const target = $("credits_batch_sel").value;
-  if (!target) { toast("Select a batch first"); return; }
-  socket.emit("save-credits", { batch_id: target, credits: creditsData });
-  $("credits_save_btn").disabled = true;
-  $("credits_save_btn").textContent = "Saving...";
-});
-
 socket.on("credits-saved", (d) => {
-  $("credits_save_btn").disabled = false;
-  $("credits_save_btn").textContent = "Save Credits & SGPA";
   $("an_credits_save_btn").disabled = false;
   $("an_credits_save_btn").textContent = "Save Credits & SGPA";
   if (d.ok) {
     toast("SGPA: " + d.avg_sgpa + " | CGPA: " + d.avg_cgpa);
-    $("credits_status").textContent = "SGPA: " + d.avg_sgpa + " | CGPA: " + d.avg_cgpa + " | " + d.student_count + " students";
     $("an_credits_status").textContent = "SGPA: " + d.avg_sgpa + " | CGPA: " + d.avg_cgpa;
     delete batchStudents[d.batch_id];
     socket.emit("get-batch-results", { batch_id: d.batch_id });
