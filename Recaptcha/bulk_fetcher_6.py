@@ -167,73 +167,96 @@ def scrape(html):
         is_reval = True
         print("[Reval] Revaluation page detected")
 
+    # --- Find all semester headings and their associated tables ---
+    # Structure: <div>Semester : N</div> followed by <div class="divTable">...</div>
+    semester_sections = []
+    for div in soup.find_all("div", {"class": "divTable"}):
+        # Look backwards for the nearest semester heading
+        exam_sem = None
+        prev = div.find_previous_sibling()
+        while prev is not None:
+            text = prev.get_text(strip=True)
+            sem_match = re.search(r"Semester\s*:\s*(\d+)", text, re.IGNORECASE)
+            if sem_match:
+                exam_sem = int(sem_match.group(1))
+                break
+            prev = prev.find_previous_sibling()
+        semester_sections.append((exam_sem, div))
+
     # --- Subject table: div-table layout ---
-    all_rows = soup.find_all("div", {"class": "divTableRow"})
-    for r in all_rows:
-        c = r.find_all("div", {"class": "divTableCell"})
-        if len(c) < 6:
-            continue
-        code = c[0].text.strip()
-        if "Subject Code" in code or not re.match(r"^[A-Za-z0-9]{2,12}$", code):
-            continue
+    for exam_sem, table_div in semester_sections:
+        all_rows = table_div.find_all("div", {"class": "divTableRow"})
+        for r in all_rows:
+            c = r.find_all("div", {"class": "divTableCell"})
+            if len(c) < 6:
+                continue
+            code = c[0].text.strip()
+            if "Subject Code" in code or not re.match(r"^[A-Za-z0-9]{2,12}$", code):
+                continue
 
-        if is_reval:
-            print("[Reval] Row cells (%d): %s" % (len(c), [x.text.strip()[:25] for x in c]))
+            # Determine subject_semester from subject code
+            subject_sem = detect_subject_semester(code)
 
-        if is_reval and len(c) >= 9:
-            old_marks = c[3].text.strip()
-            old_result = c[4].text.strip()
-            rv_marks = c[5].text.strip()
-            rv_result = c[6].text.strip()
-            final_result = c[8].text.strip()
-            internal = c[2].text.strip()
-            # TOTAL = INTERNAL + REVALUATION EXTERNAL
-            try:
-                int_val = int(internal)
-                rv_ext = int(rv_marks)
-                final_total = int_val + rv_ext
-            except (ValueError, TypeError):
-                final_total = old_marks
-            entry = {
-                "Subject Code": code,
-                "Subject Name": c[1].text.strip(),
-                "Internal Marks": internal,
-                "External Marks": old_marks,
-                "Total Marks": str(final_total),
-                "Result": final_result or old_result,
-                "Announced / Updated on": "",
-                "Old Marks": old_marks,
-                "Old Result": old_result,
-                "RV Marks": rv_marks,
-                "RV Result": rv_result,
-                "Final Marks": str(final_total),
-                "Final Result": final_result,
-            }
-            try:
-                total += final_total
-            except:
-                pass
-        else:
-            tmarks = c[4].text.strip()
-            res = c[5].text.strip()
+            if is_reval:
+                print("[Reval] Row cells (%d): %s" % (len(c), [x.text.strip()[:25] for x in c]))
 
-            entry = {
-                "Subject Code": code,
-                "Subject Name": c[1].text.strip(),
-                "Internal Marks": c[2].text.strip(),
-                "External Marks": c[3].text.strip(),
-                "Total Marks": tmarks,
-                "Result": res,
-                "Announced / Updated on": c[6].text.strip() if len(c) > 6 else "",
-            }
-            try:
-                total += int(tmarks)
-            except:
-                pass
+            if is_reval and len(c) >= 9:
+                old_marks = c[3].text.strip()
+                old_result = c[4].text.strip()
+                rv_marks = c[5].text.strip()
+                rv_result = c[6].text.strip()
+                final_result = c[8].text.strip()
+                internal = c[2].text.strip()
+                # TOTAL = INTERNAL + REVALUATION EXTERNAL
+                try:
+                    int_val = int(internal)
+                    rv_ext = int(rv_marks)
+                    final_total = int_val + rv_ext
+                except (ValueError, TypeError):
+                    final_total = old_marks
+                entry = {
+                    "Subject Code": code,
+                    "Subject Name": c[1].text.strip(),
+                    "Internal Marks": internal,
+                    "External Marks": old_marks,
+                    "Total Marks": str(final_total),
+                    "Result": final_result or old_result,
+                    "Announced / Updated on": "",
+                    "Old Marks": old_marks,
+                    "Old Result": old_result,
+                    "RV Marks": rv_marks,
+                    "RV Result": rv_result,
+                    "Final Marks": str(final_total),
+                    "Final Result": final_result,
+                    "Subject Semester": subject_sem,
+                    "Result Exam Semester": exam_sem,
+                }
+                try:
+                    total += final_total
+                except:
+                    pass
+            else:
+                tmarks = c[4].text.strip()
+                res = c[5].text.strip()
 
-        sub_rows.append(entry)
+                entry = {
+                    "Subject Code": code,
+                    "Subject Name": c[1].text.strip(),
+                    "Internal Marks": c[2].text.strip(),
+                    "External Marks": c[3].text.strip(),
+                    "Total Marks": tmarks,
+                    "Result": res,
+                    "Announced / Updated on": c[6].text.strip() if len(c) > 6 else "",
+                    "Subject Semester": subject_sem,
+                    "Result Exam Semester": exam_sem,
+                }
+                try:
+                    total += int(tmarks)
+                except:
+                    pass
 
-        max_total += 100
+            sub_rows.append(entry)
+            max_total += 100
 
     # --- Fallback: any HTML table whose header row mentions "Subject Code" ---
     if not sub_rows:
@@ -242,6 +265,28 @@ def scrape(html):
             headers = [h.get_text(" ", strip=True) for h in header_cells]
             if not any("Subject Code" in h for h in headers):
                 continue
+
+            # Try to find exam semester from preceding text
+            exam_sem = None
+            prev = table.find_previous_sibling()
+            while prev is not None:
+                text = prev.get_text(strip=True)
+                sem_match = re.search(r"Semester\s*:\s*(\d+)", text, re.IGNORECASE)
+                if sem_match:
+                    exam_sem = int(sem_match.group(1))
+                    break
+                prev = prev.find_previous_sibling()
+            # Also check parent's previous siblings
+            if exam_sem is None and table.parent:
+                prev = table.parent.find_previous_sibling()
+                while prev is not None:
+                    text = prev.get_text(strip=True)
+                    sem_match = re.search(r"Semester\s*:\s*(\d+)", text, re.IGNORECASE)
+                    if sem_match:
+                        exam_sem = int(sem_match.group(1))
+                        break
+                    prev = prev.find_previous_sibling()
+
             col = {h: i for i, h in enumerate(headers)}
             for tr in table.find_all("tr"):
                 cells = tr.find_all("td")
@@ -251,6 +296,7 @@ def scrape(html):
                 code = cell("Subject Code")
                 if not code:
                     continue
+                subject_sem = detect_subject_semester(code)
                 tmarks = cell("Total Marks") or cell("Total") or cell("Marks")
                 entry = {
                     "Subject Code": code,
@@ -260,6 +306,8 @@ def scrape(html):
                     "Total Marks": tmarks,
                     "Result": cell("Result"),
                     "Announced / Updated on": cell("Announced / Updated on"),
+                    "Subject Semester": subject_sem,
+                    "Result Exam Semester": exam_sem,
                 }
                 if is_reval:
                     rv_marks = cell("RV Marks") or cell("RV Marks Secured") or ""
@@ -289,6 +337,19 @@ def scrape(html):
         "total_max": max_total,
         "percentage": pct
     }
+
+
+def detect_subject_semester(code):
+    """Detect semester from subject code.
+    Extract first digit of numeric portion after alphabetic prefix.
+    Examples: BCS403→4, BCS518C→5, BCS601→6, BCSL606→6, BYOK658→6
+    Returns semester int or None if unable to detect."""
+    m = re.match(r"^[A-Za-z]+(\d)", code or "")
+    if m:
+        d = int(m.group(1))
+        if 1 <= d <= 8:
+            return d
+    return None
 
 
 # -----------------------------------------

@@ -488,26 +488,34 @@ def _auto_save_to_db(run_id):
         "data": f"[DB] Auto-saving: year={year}, scheme={scheme}, semester={semester}, dept={department}\n"
     })
 
-    batch_doc, student_docs = build_db_payload(year, scheme, semester, department)
-    if batch_doc is None:
-        socketio.emit("log-message", {"data": f"[DB] Auto-save skipped: {student_docs}\n"})
+    batch_results, err = build_db_payload(year, scheme, semester, department)
+    if batch_results is None:
+        socketio.emit("log-message", {"data": f"[DB] Auto-save skipped: {err}\n"})
         return
 
+    total_added = 0
+    total_students = 0
+    last_batch_id = None
+    for batch_doc, student_docs in batch_results:
+        batch_id, added, merged, total, updated = db.save_batch(batch_doc, student_docs)
+        if batch_id is None:
+            socketio.emit("log-message", {"data": f"[DB] Auto-save failed sem {batch_doc.get('semester')}: {added}\n"})
+            continue
+        last_batch_id = batch_id
+        total_added += added
+        total_students += total
+        socketio.emit("log-message", {
+            "data": f"[DB] Auto-saved sem {batch_doc.get('semester')} — {total} students"
+                    f"{f', {updated} updated' if updated else ''}{f', {added} new' if added else ''}.\n"
+        })
 
-    batch_id, added, merged, total = db.save_batch(batch_doc, student_docs)
-    if batch_id is None:
-        socketio.emit("log-message", {"data": f"[DB] Auto-save failed: {added}\n"})
-        return
-
-    socketio.emit("log-message", {
-        "data": f"[DB] Auto-saved batch {batch_id} — {total} students.\n"
-    })
-    socketio.emit("save-to-db-complete", {
-        "batch_id": str(batch_id),
-        "student_count": total,
-        "added_count": added,
-        "merged": merged,
-    })
+    if last_batch_id is not None:
+        socketio.emit("save-to-db-complete", {
+            "batch_id": str(last_batch_id),
+            "student_count": total_students,
+            "added_count": total_added,
+            "merged": False,
+        })
 
 
 # -----------------------------------------
@@ -603,8 +611,10 @@ def _calc_total(internal, external):
 
 
 def build_db_payload(year, scheme, semester, department):
-    """Read the just-fetched raw CSVs and build (batch_doc, student_docs).
-    Returns (None, error_message) on any failure."""
+    """Read the just-fetched raw CSVs and build batch payloads.
+    Subjects are classified by subject_semester (from subject code), NOT by
+    the Save dialog semester or USN. Each subject also records result_exam_semester.
+    Returns (list_of_(batch_doc, student_docs), error_message)."""
     if not os.path.exists(RAW_DATA) or not os.path.exists(RAW_SUMMARY):
         return None, "No fetched data found. Run a fetch first."
 
@@ -621,11 +631,12 @@ def build_db_payload(year, scheme, semester, department):
     summ["USN"] = summ["USN"].astype(str).str.strip().str.upper()
     summ_map = {r["USN"]: r for _, r in summ.iterrows()}
 
-    subject_codes = sorted(subs["Subject Code"].dropna().unique().tolist())
     usns = sorted(subs["USN"].dropna().unique().tolist())
     prefix = re.sub(r"\d+$", "", usns[0]) if usns else ""
 
-    student_docs = []
+    # Group subjects by detected subject_semester
+    # sem_groups: { subject_sem: { usn: {name, percentage, subjects, has_fail} } }
+    sem_groups = {}
     for usn in usns:
         group = subs[subs["USN"] == usn]
         name = ""
@@ -636,43 +647,100 @@ def build_db_payload(year, scheme, semester, department):
         if srow is not None and pd.notna(srow.get("percentage")):
             percentage = round(float(srow["percentage"]), 2)
 
-        subjects = []
-        has_fail = False
         for _, r in group.iterrows():
+            code = str(r["Subject Code"]).strip()
+
+            # Determine subject_semester from CSV column or fallback to code detection
+            subj_sem_raw = r.get("Subject Semester")
+            if pd.notna(subj_sem_raw) and str(subj_sem_raw).strip():
+                try:
+                    subject_sem = int(float(str(subj_sem_raw).strip()))
+                except (ValueError, TypeError):
+                    subject_sem = _detect_semester_from_code(code)
+            else:
+                subject_sem = _detect_semester_from_code(code)
+
+            # Determine result_exam_semester from CSV column or fallback to Save dialog semester
+            exam_sem_raw = r.get("Result Exam Semester")
+            if pd.notna(exam_sem_raw) and str(exam_sem_raw).strip():
+                try:
+                    exam_sem = int(float(str(exam_sem_raw).strip()))
+                except (ValueError, TypeError):
+                    exam_sem = int(semester) if semester and semester.isdigit() else 0
+            else:
+                exam_sem = int(semester) if semester and semester.isdigit() else 0
+
+            # If subject semester can't be detected, fall back to exam semester
+            if subject_sem is None or subject_sem == 0:
+                subject_sem = exam_sem if exam_sem > 0 else 1
+
             result = str(r.get("Result", "") or "").strip()
-            if result == "F":
-                has_fail = True
             total_marks = _to_num(r.get("Total Marks"))
-            subjects.append({
-                "code": str(r["Subject Code"]).strip(),
+            subj = {
+                "code": code,
                 "subject_name": str(r.get("Subject Name", "") or "").strip(),
                 "internal": _to_num(r.get("Internal Marks")),
                 "external": _to_num(r.get("External Marks")),
                 "total": total_marks,
                 "grade": _grade(total_marks),
                 "result": result,
+                "subject_semester": subject_sem,
+                "result_exam_semester": exam_sem,
+            }
+
+            if subject_sem not in sem_groups:
+                sem_groups[subject_sem] = {}
+            if usn not in sem_groups[subject_sem]:
+                sem_groups[subject_sem][usn] = {
+                    "usn": usn,
+                    "name": name,
+                    "subjects": [],
+                    "percentage": percentage,
+                    "has_fail": False,
+                }
+            sem_groups[subject_sem][usn]["subjects"].append(subj)
+            if result == "F":
+                sem_groups[subject_sem][usn]["has_fail"] = True
+
+    # Build separate batch_doc + student_docs per subject_semester
+    results = []
+    for sem_num in sorted(sem_groups.keys()):
+        students = []
+        for usn in sorted(sem_groups[sem_num].keys()):
+            stu = sem_groups[sem_num][usn]
+            students.append({
+                "usn": stu["usn"],
+                "name": stu["name"],
+                "subjects": stu["subjects"],
+                "percentage": stu["percentage"],
+                "result_status": "FAIL" if stu["has_fail"] else "PASS",
             })
+        all_codes = sorted(set(s["code"] for stu in students for s in stu["subjects"]))
+        batch_doc = {
+            "year": str(year).strip(),
+            "scheme": str(scheme).strip(),
+            "semester": str(sem_num),
+            "department": str(department).strip(),
+            "saved_at": datetime.utcnow(),
+            "usn_prefix": prefix,
+            "student_count": len(students),
+            "subjects": all_codes,
+            "run_id": current_run_id,
+        }
+        results.append((batch_doc, students))
 
-        student_docs.append({
-            "usn": usn,
-            "name": name,
-            "subjects": subjects,
-            "percentage": percentage,
-            "result_status": "FAIL" if has_fail else "PASS",
-        })
+    return results, None
 
-    batch_doc = {
-        "year": str(year).strip(),
-        "scheme": str(scheme).strip(),
-        "semester": str(semester).strip(),
-        "department": str(department).strip(),
-        "saved_at": datetime.utcnow(),
-        "usn_prefix": prefix,
-        "student_count": len(student_docs),
-        "subjects": subject_codes,
-        "run_id": current_run_id,
-    }
-    return batch_doc, student_docs
+
+def _detect_semester_from_code(code):
+    """Detect semester from subject code: first digit after alphabetic prefix.
+    BCS403→4, BCS518C→5, BCS601→6, BCSL606→6, BYOK658→6"""
+    m = re.match(r"^[A-Za-z]+(\d)", code or "")
+    if m:
+        d = int(m.group(1))
+        if 1 <= d <= 8:
+            return d
+    return None
 
 
 @socketio.on("save-to-db")
@@ -701,34 +769,43 @@ def save_to_db(data):
         emit("log-message", {"data": "[DB ERROR] year, scheme, semester and department are all required.\n"})
         return
 
-    batch_doc, student_docs = build_db_payload(year, scheme, semester, department)
-    if batch_doc is None:
-        emit("log-message", {"data": f"[DB ERROR] {student_docs}\n"})
+    batch_results, err = build_db_payload(year, scheme, semester, department)
+    if batch_results is None:
+        emit("log-message", {"data": f"[DB ERROR] {err}\n"})
         return
 
-    if target_id:
-        batch_id, added, merged, total = db.merge_into_batch(target_id, batch_doc, student_docs)
-    else:
-        batch_id, added, merged, total = db.save_batch(batch_doc, student_docs)
+    total_added = 0
+    total_students = 0
+    total_updated = 0
+    last_batch_id = None
+    for batch_doc, student_docs in batch_results:
+        if target_id:
+            batch_id, added, merged, total, updated = db.merge_into_batch(target_id, batch_doc, student_docs)
+        else:
+            batch_id, added, merged, total, updated = db.save_batch(batch_doc, student_docs)
 
-    if batch_id is None:
-        emit("log-message", {"data": f"[DB ERROR] Save failed: {added}\n"})
-        return
+        if batch_id is None:
+            emit("log-message", {"data": f"[DB ERROR] Save failed sem {batch_doc.get('semester')}: {added}\n"})
+            continue
 
-    if merged or target_id:
-        emit("log-message", {
-            "data": f"[DB] Merged into batch {batch_id} — {added} new student(s), total {total}.\n"
+        last_batch_id = batch_id
+        total_added += added
+        total_updated += updated
+        total_students += total
+        sem_label = batch_doc.get("semester", "?")
+        if merged or target_id:
+            emit("log-message", {"data": f"[DB] Merged sem {sem_label} — {added} new, {updated} updated, {total} total.\n"})
+        else:
+            emit("log-message", {"data": f"[DB] Saved sem {sem_label} batch {batch_id} — {total} students.\n"})
+
+    if last_batch_id is not None:
+        emit("save-to-db-complete", {
+            "batch_id": str(last_batch_id),
+            "student_count": total_students,
+            "added_count": total_added,
+            "updated_count": total_updated,
+            "merged": bool(target_id),
         })
-    else:
-        emit("log-message", {
-            "data": f"[DB] Saved new batch {batch_id} — {total} students, {len(batch_doc['subjects'])} subjects.\n"
-        })
-    emit("save-to-db-complete", {
-        "batch_id": str(batch_id),
-        "student_count": total,
-        "added_count": added,
-        "merged": merged,
-    })
 
 
 @socketio.on("get-batches")

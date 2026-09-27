@@ -102,11 +102,82 @@ def _to_row(doc):
     return out
 
 
+def _load_json(value, default):
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except Exception:
+            return default
+    return value if value is not None else default
+
+
+def _merge_subjects(old_list, new_list):
+    """Union two subject lists by subject code.
+    Entries coming from new_list (the latest fetch) win on conflict,
+    older subjects that are not in new_list are kept so no result is lost."""
+    old_list = old_list or []
+    new_list = new_list or []
+    out = [dict(s) for s in new_list]
+    seen = set(s.get("code") for s in out)
+    for s in old_list:
+        if s.get("code") not in seen:
+            out.append(dict(s))
+            seen.add(s.get("code"))
+    return out
+
+
+def _apply_existing(batch_id, student_docs):
+    """Insert students that are missing from the batch and refresh the ones
+    that already exist (merging their subjects). Returns (new_count, updated_count, total)."""
+    res = client.table("student_results").select("id", "usn", "name", "subjects", "percentage", "result_status").eq("batch_id", batch_id).execute()
+    existing = {}
+    for r in (res.data or []):
+        # keep the first row per USN (later duplicate rows handled by fetch_student_record)
+        existing.setdefault(r["usn"], r)
+
+    new_docs = []
+    updated = 0
+    for d in student_docs:
+        ex = existing.get(d["usn"])
+        if ex is None:
+            new_docs.append(d)
+            continue
+
+        old_subs = _load_json(ex.get("subjects"), [])
+        new_subs = d.get("subjects") or []
+        merged_subs = _merge_subjects(old_subs, new_subs)
+        if merged_subs == old_subs and (d.get("name") or ex.get("name")) == ex.get("name"):
+            continue
+
+        old_status = (ex.get("result_status") or "").strip()
+        new_status = (d.get("result_status") or "").strip()
+        status = "FAIL" if "FAIL" in (old_status, new_status) else (new_status or old_status)
+
+        fields = {"subjects": json.dumps(merged_subs), "result_status": status}
+        if d.get("name"):
+            fields["name"] = d["name"]
+        pct = d.get("percentage")
+        if pct is not None:
+            fields["percentage"] = pct
+        client.table("student_results").update(fields).eq("id", ex["id"]).execute()
+        updated += 1
+
+    new_docs.sort(key=lambda d: d.get("usn", ""))
+    if new_docs:
+        s_rows = [{**_to_row(s), "batch_id": batch_id} for s in new_docs]
+        for i in range(0, len(s_rows), 500):
+            client.table("student_results").insert(s_rows[i:i+500]).execute()
+
+    total_res = client.table("student_results").select("id", count="exact").eq("batch_id", batch_id).execute()
+    total = total_res.count or (len(existing) + len(new_docs))
+    return len(new_docs), updated, total
+
+
 # ── BATCHES ──────────────────────────────────────────────────────────────────
 
 def save_batch(batch_doc, student_docs):
     if not is_connected():
-        return None, "Supabase not connected", False, 0
+        return None, "Supabase not connected", False, 0, 0
     try:
         # Check for existing batch with same key
         existing = client.table("fetch_batches").select("*").eq("year", batch_doc["year"]).eq("scheme", batch_doc["scheme"]).eq("semester", batch_doc["semester"]).eq("department", batch_doc["department"]).execute()
@@ -125,21 +196,11 @@ def save_batch(batch_doc, student_docs):
                 # Insert in chunks of 500
                 for i in range(0, len(s_rows), 500):
                     client.table("student_results").insert(s_rows[i:i+500]).execute()
-            return batch_id, len(student_docs), False, len(student_docs)
+            return batch_id, len(student_docs), False, len(student_docs), 0
 
         # Merge path
         batch_id = rows[0]["id"]
-        existing_res = client.table("student_results").select("usn").eq("batch_id", batch_id).execute()
-        existing_usns = set(r["usn"] for r in (existing_res.data or []))
-        new_docs = [d for d in student_docs if d["usn"] not in existing_usns]
-        new_docs.sort(key=lambda d: d.get("usn", ""))
-        if new_docs:
-            s_rows = [{"batch_id": batch_id, **_to_row(s)} for s in new_docs]
-            for i in range(0, len(s_rows), 500):
-                client.table("student_results").insert(s_rows[i:i+500]).execute()
-
-        total_res = client.table("student_results").select("id", count="exact").eq("batch_id", batch_id).execute()
-        total = total_res.count or len(new_docs)
+        added, updated, total = _apply_existing(batch_id, student_docs)
         merged_subjects = sorted(
             set(rows[0].get("subjects") or []) | set(batch_doc.get("subjects") or [])
         )
@@ -148,32 +209,24 @@ def save_batch(batch_doc, student_docs):
             "subjects": json.dumps(merged_subjects),
             "saved_at": _now(),
         }).eq("id", batch_id).execute()
-        return batch_id, len(new_docs), True, total
+        if updated:
+            print(f"[DB] batch {batch_id[:8]} sem {batch_doc.get('semester')}: updated {updated} existing student(s), added {added}")
+        return batch_id, added, True, total, updated
 
     except Exception as e:
-        return None, str(e), False, 0
+        return None, str(e), False, 0, 0
 
 
 def merge_into_batch(batch_id, batch_doc, student_docs):
     if not is_connected():
-        return None, "Supabase not connected", False, 0
+        return None, "Supabase not connected", False, 0, 0
     try:
         existing = client.table("fetch_batches").select("*").eq("id", batch_id).execute()
         rows = existing.data or []
         if not rows:
-            return None, "Batch not found", False, 0
+            return None, "Batch not found", False, 0, 0
 
-        existing_res = client.table("student_results").select("usn").eq("batch_id", batch_id).execute()
-        existing_usns = set(r["usn"] for r in (existing_res.data or []))
-        new_docs = [d for d in student_docs if d["usn"] not in existing_usns]
-        new_docs.sort(key=lambda d: d.get("usn", ""))
-        if new_docs:
-            s_rows = [{"batch_id": batch_id, **_to_row(s)} for s in new_docs]
-            for i in range(0, len(s_rows), 500):
-                client.table("student_results").insert(s_rows[i:i+500]).execute()
-
-        total_res = client.table("student_results").select("id", count="exact").eq("batch_id", batch_id).execute()
-        total = total_res.count or len(new_docs)
+        added, updated, total = _apply_existing(batch_id, student_docs)
         merged_subjects = sorted(
             set(rows[0].get("subjects") or []) | set(batch_doc.get("subjects") or [])
         )
@@ -182,10 +235,12 @@ def merge_into_batch(batch_id, batch_doc, student_docs):
             "subjects": json.dumps(merged_subjects),
             "saved_at": _now(),
         }).eq("id", batch_id).execute()
-        return batch_id, len(new_docs), True, total
+        if updated:
+            print(f"[DB] batch {batch_id[:8]}: updated {updated} existing student(s), added {added}")
+        return batch_id, added, True, total, updated
 
     except Exception as e:
-        return None, str(e), False, 0
+        return None, str(e), False, 0, 0
 
 
 def fetch_batches(limit=100):
@@ -293,34 +348,22 @@ def fetch_student_record(usn):
         if not students:
             return None
 
-        name = ""
-        semesters = []
-        seen_sem = set()
+        # oldest batch first, so results from newer saves win on conflicts
+        prepared = []
         for s in students:
-            batch_id = s.get("batch_id", "")
-            batch = fetch_batch(batch_id)
+            batch = fetch_batch(s.get("batch_id", ""))
             if not batch:
                 continue
-            sem = batch.get("semester", "?")
-            if sem in seen_sem:
-                continue
-            seen_sem.add(sem)
-            if not name:
-                name = s.get("name", "")
-            subjects = s.get("subjects", []) or []
-            if isinstance(subjects, str):
-                subjects = json.loads(subjects)
-            credits_map = batch.get("credits", {}) or {}
-            if isinstance(credits_map, str):
-                credits_map = json.loads(credits_map)
+            subjects = _load_json(s.get("subjects"), [])
+            credits_map = _load_json(batch.get("credits", {}), {})
             if credits_map:
                 for subj in subjects:
                     cr = credits_map.get(subj.get("code", ""))
                     if cr is not None:
                         subj["credit"] = float(cr)
-            semesters.append({
-                "batch_id": batch_id,
-                "semester": sem,
+            prepared.append((batch.get("saved_at", "") or "", str(batch.get("semester", "?")), {
+                "batch_id": s.get("batch_id", ""),
+                "semester": str(batch.get("semester", "?")),
                 "scheme": batch.get("scheme", ""),
                 "year": batch.get("year", ""),
                 "department": batch.get("department", ""),
@@ -328,7 +371,29 @@ def fetch_student_record(usn):
                 "percentage": s.get("percentage"),
                 "result_status": s.get("result_status", ""),
                 "saved_at": batch.get("saved_at", ""),
-            })
+                "name": s.get("name", ""),
+            }))
+        prepared.sort(key=lambda x: x[0])
+
+        semesters = []
+        index = {}
+        name = ""
+        for _, sem, entry in prepared:
+            if not name and entry.get("name"):
+                name = entry["name"]
+            cur = index.get(sem)
+            if cur is None:
+                index[sem] = entry
+                semesters.append(entry)
+            else:
+                # same semester stored in more than one batch -> merge, don't drop
+                cur["subjects"] = _merge_subjects(cur["subjects"], entry["subjects"])
+                if entry.get("percentage") is not None:
+                    cur["percentage"] = entry["percentage"]
+                if entry.get("result_status"):
+                    cur["result_status"] = entry["result_status"]
+        for entry in semesters:
+            entry.pop("name", None)
 
         def sem_sort_key(x):
             try:

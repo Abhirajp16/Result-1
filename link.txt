@@ -1,4 +1,0 @@
-https://github.com/Mayur-U/Recaptcha
-
-git clone https://github.com/Mayur-U/Recaptcha
-
