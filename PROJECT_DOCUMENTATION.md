@@ -79,7 +79,7 @@ Everything is driven from a **Flask + Flask-SocketIO web dashboard** (light them
 
 | File / Folder | Purpose |
 | :--- | :--- |
-| `Recaptcha/` | The actual project (cloned from https://github.com/Mayur-U/Recaptcha) |
+| `Recaptcha/` | The actual project folder (main application) |
 | `link.txt` | Stores the GitHub repo link + clone command for the project |
 | `angel/test.py` | Scratch file — just prints `"Hello AWS Local Environment"` (unrelated experiment) |
 | `pi/test.py` | Scratch file — same test print (unrelated experiment) |
