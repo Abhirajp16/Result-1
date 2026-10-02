@@ -2284,11 +2284,49 @@ function renderStudentRecord(data, container) {
   html += `<div class="sr-sem-cell sr-backlogs"><div class="sr-sem-label">Backlogs</div><div class="sr-sem-val">${totalBacklogs}</div></div>`;
   html += '</div>';
 
-  /* SEMESTER CARDS */
+  /* SEMESTER CARDS — VTU style: one block per semester, plus a separate
+     BACKLOG / SUPPLEMENTARY EXAM table for subjects with result F. */
+  const tableHead = `<thead><tr>
+          <th>Subject Code</th><th>Subject Name</th>
+          <th style="text-align:center">Internal Marks</th><th style="text-align:center">External Marks</th>
+          <th style="text-align:center">Total</th><th style="text-align:center">Result</th>
+        </tr></thead>`;
+
+  function subjectRow(sub) {
+    const isRv = sub.is_revaluated === true;
+    const bestTotal = isRv && sub.final_total != null ? sub.final_total : sub.total;
+    const bestResult = (isRv && sub.final_result ? sub.final_result : sub.result) || "";
+    const pass = bestResult !== "F";
+    const rvBadge = isRv ? ' <span style="background:#059669;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;vertical-align:middle;">RV</span>' : "";
+    const origExt = sub.original_external != null ? sub.original_external : sub.external;
+    const origTot = sub.original_total != null ? sub.original_total : sub.total;
+    let extCell, totalCell;
+    if (isRv && sub.rv_marks != null) {
+      extCell = `<td class="sr-marks"><span style="text-decoration:line-through;color:#9CA3AF;">${origExt != null ? origExt : "—"}</span> <span style="font-weight:700;color:#059669;">${sub.rv_marks}</span></td>`;
+      totalCell = `<td class="sr-marks" style="font-weight:800;"><span style="text-decoration:line-through;color:#9CA3AF;">${origTot != null ? origTot : "—"}</span> <span style="color:#059669;">${bestTotal != null ? bestTotal : "—"}</span></td>`;
+    } else {
+      extCell = `<td class="sr-marks">${sub.external != null ? sub.external : "—"}</td>`;
+      totalCell = `<td class="sr-marks" style="font-weight:800;">${bestTotal != null ? bestTotal : "—"}</td>`;
+    }
+    return `<tr>
+        <td style="font-family:monospace;font-weight:600;">${sub.code || ""}${rvBadge}</td>
+        <td>${sub.subject_name || ""}</td>
+        <td class="sr-marks">${sub.internal != null ? sub.internal : "—"}</td>
+        ${extCell}
+        ${totalCell}
+        <td style="text-align:center"><span class="${pass ? 'sr-pill-pass' : 'sr-pill-fail'}">${bestResult || "—"}</span></td>
+      </tr>`;
+  }
+
   sems.forEach(s => {
     const num = semNum(s.semester);
     const sgpa = semSGPAs[num] || "—";
     const subs = s.subjects || [];
+    const fails = subs.filter(sub => {
+      const r = (sub.is_revaluated && sub.final_result) ? sub.final_result : sub.result;
+      return r === "F";
+    });
+    const current = subs.filter(sub => fails.indexOf(sub) === -1);
     html += `<div class="sr-sem-card">
       <div class="sr-sem-card-head">
         <span class="sr-sch-label">Semester ${s.semester}</span>
@@ -2296,48 +2334,15 @@ function renderStudentRecord(data, container) {
         <span class="sr-sch-sgpa">SGPA ${sgpa}</span>
       </div>
       <div style="overflow-x:auto;">
-      <table class="sr-subj-table">
-        <thead><tr>
-          <th>#</th><th>Subject Code</th><th>Subject Name</th>
-          <th style="text-align:center">INT</th><th style="text-align:center">EXT</th>
-          <th style="text-align:center">TOTAL</th><th style="text-align:center">GRADE</th>
-          <th style="text-align:center">RES</th>
-        </tr></thead>
-        <tbody>`;
-    subs.forEach((sub, idx2) => {
-      const isRv = sub.is_revaluated === true;
-      const bestTotal = isRv && sub.final_total != null ? sub.final_total : sub.total;
-      const bestResult = isRv && sub.final_result ? sub.final_result : (sub.result || "");
-      const bestGrade = isRv && sub.final_grade ? sub.final_grade : gradeOf(bestTotal);
-      const gc = gradeClass(bestGrade);
-      const pass = bestResult !== "F";
-      const rvBadge = isRv ? ' <span style="background:#059669;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;vertical-align:middle;">RV</span>' : "";
-      const origExt = sub.original_external != null ? sub.original_external : sub.external;
-      const origTot = sub.original_total != null ? sub.original_total : sub.total;
-      let extCell, totalCell, gradeCell, resCell;
-      if (isRv && sub.rv_marks != null) {
-        extCell = `<td class="sr-marks"><span style="text-decoration:line-through;color:#9CA3AF;">${origExt != null ? origExt : "—"}</span> <span style="font-weight:700;color:#059669;">${sub.rv_marks}</span></td>`;
-        totalCell = `<td class="sr-marks" style="font-weight:800;"><span style="text-decoration:line-through;color:#9CA3AF;">${origTot != null ? origTot : "—"}</span> <span style="color:#059669;">${bestTotal != null ? bestTotal : "—"}</span></td>`;
-        gradeCell = `<td style="text-align:center"><span class="sr-grade ${gc}">${bestGrade}</span></td>`;
-        resCell = `<td style="text-align:center"><span class="${pass ? 'sr-pill-pass' : 'sr-pill-fail'}">${bestResult || "—"}</span></td>`;
-      } else {
-        extCell = `<td class="sr-marks">${sub.external != null ? sub.external : "—"}</td>`;
-        totalCell = `<td class="sr-marks" style="font-weight:800;">${bestTotal != null ? bestTotal : "—"}</td>`;
-        gradeCell = `<td style="text-align:center"><span class="sr-grade ${gc}">${bestGrade}</span></td>`;
-        resCell = `<td style="text-align:center"><span class="${pass ? 'sr-pill-pass' : 'sr-pill-fail'}">${bestResult || "—"}</span></td>`;
-      }
-      html += `<tr>
-        <td>${idx2 + 1}</td>
-        <td style="font-family:monospace;font-weight:600;">${sub.code}${rvBadge}</td>
-        <td>${sub.subject_name || ""}</td>
-        <td class="sr-marks">${sub.internal != null ? sub.internal : "—"}</td>
-        ${extCell}
-        ${totalCell}
-        ${gradeCell}
-        ${resCell}
-      </tr>`;
-    });
-    html += '</tbody></table></div></div>';
+      <table class="sr-subj-table">${tableHead}<tbody>${current.map(subjectRow).join("")}</tbody></table>
+      </div>`;
+    if (fails.length) {
+      html += `<div style="margin-top:14px;padding:8px 14px;background:#FEF2F2;border-left:4px solid #DC2626;border-radius:6px;font-size:11.5px;font-weight:800;color:#B91C1C;letter-spacing:.5px;">BACKLOG / SUPPLEMENTARY EXAM &mdash; SEMESTER ${s.semester}</div>
+      <div style="overflow-x:auto;margin-top:8px;">
+      <table class="sr-subj-table">${tableHead}<tbody>${fails.map(subjectRow).join("")}</tbody></table>
+      </div>`;
+    }
+    html += `</div>`;
   });
 
   body.innerHTML = html;

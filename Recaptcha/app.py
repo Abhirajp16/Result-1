@@ -54,6 +54,21 @@ def subject_analytics_page():
     return resp
 
 
+def _attach_cgpa(students, batch):
+    """Attach the cumulative CGPA (all semesters up to this batch's semester,
+    courses with F excluded from both numerator and denominator)."""
+    if not students or not batch:
+        return students
+    try:
+        max_sem = int(batch.get("semester"))
+    except (TypeError, ValueError):
+        max_sem = None
+    cgpa_map = db.compute_cgpa_map([s.get("usn", "") for s in students], max_sem)
+    for s in students:
+        s["cgpa"] = cgpa_map.get(str(s.get("usn", "")).strip().upper())
+    return students
+
+
 @app.route("/api/subject-analytics")
 def api_subject_analytics():
     batch_id = request.args.get("batch_id", "").strip()
@@ -68,6 +83,7 @@ def api_subject_analytics():
     if batch.get("credits") and students:
         credits_map = {k: float(v) for k, v in batch["credits"].items()}
         students = db.compute_sgpa(students, credits_map)
+    students = _attach_cgpa(students, batch)
     result = []
     for s in students:
         for sub in (s.get("subjects") or []):
@@ -686,6 +702,7 @@ def build_db_payload(year, scheme, semester, department):
                 "result": result,
                 "subject_semester": subject_sem,
                 "result_exam_semester": exam_sem,
+                "announced": str(r.get("Announced / Updated on", "") or "").strip(),
             }
 
             if subject_sem not in sem_groups:
@@ -827,6 +844,7 @@ def get_batch_results(data):
     if batch and batch.get("credits") and students:
         credits_map = {k: float(v) for k, v in batch["credits"].items()}
         students = db.compute_sgpa(students, credits_map)
+    students = _attach_cgpa(students, batch)
     emit("batch-results", {"batch": batch, "students": students, "error": None})
 
 
@@ -889,19 +907,15 @@ def save_credits_handler(data):
         students = db.fetch_students(batch_id)
         credits_map = {k: float(v) for k, v in credits.items()}
         students = db.compute_sgpa(students, credits_map)
-        # Store SGPA & CGPA back to each student document
+        batch = db.fetch_batch(batch_id) or {}
+        students = _attach_cgpa(students, batch)
+        # Store SGPA back to each student (student_results has no cgpa column)
         for s in students:
-            if s.get("id"):
+            if s.get("id") and s.get("sgpa") is not None:
                 try:
-                    update_fields = {}
-                    if s.get("sgpa") is not None:
-                        update_fields["sgpa"] = s["sgpa"]
-                    if s.get("cgpa") is not None:
-                        update_fields["cgpa"] = s["cgpa"]
-                    if update_fields:
-                        db.client.table("student_results").update(
-                            update_fields
-                        ).eq("id", s["id"]).execute()
+                    db.client.table("student_results").update(
+                        {"sgpa": s["sgpa"]}
+                    ).eq("id", s["id"]).execute()
                 except Exception:
                     pass
         avg_sgpa = round(sum(s["sgpa"] for s in students if s.get("sgpa") is not None) /
@@ -960,18 +974,14 @@ def compute_yearly_cgpa_handler(data):
     credits_map1 = {k: float(v) for k, v in credits1.items()}
     credits_map2 = {k: float(v) for k, v in credits2.items()}
     yearly = db.compute_yearly_cgpa(students1, students2, credits_map1, credits_map2)
-    # Store CGPA in both batches
+    # Cumulative CGPA up to the later of the two semesters (F excluded).
+    # student_results has no cgpa column, so nothing is written back to the DB.
+    max_sem = max(sem_num, paired_sem)
+    cgpa_map = db.compute_cgpa_map([e["usn"] for e in yearly], max_sem)
     for entry in yearly:
-        for bid in [batch_id, paired_batch["id"]]:
-            b_studs = students1 if bid == batch_id else students2
-            for s in b_studs:
-                if s.get("usn") == entry["usn"] and s.get("id") and entry["cgpa"] is not None:
-                    try:
-                        db.client.table("student_results").update(
-                            {"cgpa": entry["cgpa"]}
-                        ).eq("id", s["id"]).execute()
-                    except Exception:
-                        pass
+        cgpa = cgpa_map.get(entry["usn"])
+        if cgpa is not None:
+            entry["cgpa"] = cgpa
     year_label = f"Year {(sem_num + 1) // 2}"
     emit("yearly-cgpa-result", {"ok": True, "batch_id": batch_id,
                                 "year": year_label, "cgpa_data": yearly,
@@ -989,6 +999,7 @@ def get_credits_handler(data):
     if credits:
         credits_map = {k: float(v) for k, v in credits.items()}
         students = db.compute_sgpa(students, credits_map)
+        students = _attach_cgpa(students, db.fetch_batch(batch_id))
     emit("credits-data", {"batch_id": batch_id, "credits": credits, "students": students})
 
 
@@ -1139,6 +1150,9 @@ def compare_reval(data):
                     "original_total": orig_total,
                     "original_result": orig_result,
                     "original_grade": orig_grade,
+                    "announced": subj.get("announced", ""),
+                    "subject_semester": subj.get("subject_semester"),
+                    "result_exam_semester": subj.get("result_exam_semester"),
                 })
             else:
                 new_subjects.append({
@@ -1159,6 +1173,9 @@ def compare_reval(data):
                     "original_total": None,
                     "original_result": None,
                     "original_grade": None,
+                    "announced": subj.get("announced", ""),
+                    "subject_semester": subj.get("subject_semester"),
+                    "result_exam_semester": subj.get("result_exam_semester"),
                 })
 
         new_student = {"usn": usn, "name": old_student.get("name", ""), "subjects": new_subjects}
@@ -1283,6 +1300,9 @@ def update_reval_result(data):
                     "original_total": orig_total,
                     "original_result": orig_result,
                     "original_grade": orig_grade,
+                    "announced": subj.get("announced", ""),
+                    "subject_semester": subj.get("subject_semester"),
+                    "result_exam_semester": subj.get("result_exam_semester"),
                 })
             else:
                 # Non-reval'd OR reval'd but not selected: keep original DB data exactly
@@ -1300,6 +1320,9 @@ def update_reval_result(data):
                     "final_result": "",
                     "final_grade": "",
                     "is_revaluated": False,
+                    "announced": subj.get("announced", ""),
+                    "subject_semester": subj.get("subject_semester"),
+                    "result_exam_semester": subj.get("result_exam_semester"),
                 })
 
         # Determine pass/fail using the BEST available result for each subject

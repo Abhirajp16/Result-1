@@ -7,6 +7,7 @@ gracefully (returns empty results / error messages) — the app keeps working.
 
 import os
 import json
+import re
 import threading
 import time
 from datetime import datetime, timezone
@@ -111,6 +112,30 @@ def _load_json(value, default):
     return value if value is not None else default
 
 
+def _to_semester(value):
+    """Best-effort int semester from a value like "6" / 6 / "Sem 6"."""
+    try:
+        n = int(str(value).strip())
+        return n if 1 <= n <= 8 else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def _subject_semester(subj, fallback=0):
+    """Semester a subject belongs to: its stored subject_semester first, then
+    the first digit after the alphabetic prefix of its code (BCS601->6,
+    BCSL606->6, BMATS101->1), finally the given fallback."""
+    sem = _to_semester(subj.get("subject_semester"))
+    if sem:
+        return sem
+    m = re.match(r"^[A-Za-z]+(\d)", str(subj.get("code") or ""))
+    if m:
+        n = int(m.group(1))
+        if 1 <= n <= 8:
+            return n
+    return _to_semester(fallback)
+
+
 def _merge_subjects(old_list, new_list):
     """Union two subject lists by subject code.
     Entries coming from new_list (the latest fetch) win on conflict,
@@ -202,7 +227,7 @@ def save_batch(batch_doc, student_docs):
         batch_id = rows[0]["id"]
         added, updated, total = _apply_existing(batch_id, student_docs)
         merged_subjects = sorted(
-            set(rows[0].get("subjects") or []) | set(batch_doc.get("subjects") or [])
+            set(_load_json(rows[0].get("subjects"), [])) | set(_load_json(batch_doc.get("subjects"), []))
         )
         client.table("fetch_batches").update({
             "student_count": total,
@@ -228,7 +253,7 @@ def merge_into_batch(batch_id, batch_doc, student_docs):
 
         added, updated, total = _apply_existing(batch_id, student_docs)
         merged_subjects = sorted(
-            set(rows[0].get("subjects") or []) | set(batch_doc.get("subjects") or [])
+            set(_load_json(rows[0].get("subjects"), [])) | set(_load_json(batch_doc.get("subjects"), []))
         )
         client.table("fetch_batches").update({
             "student_count": total,
@@ -361,9 +386,9 @@ def fetch_student_record(usn):
                     cr = credits_map.get(subj.get("code", ""))
                     if cr is not None:
                         subj["credit"] = float(cr)
-            prepared.append((batch.get("saved_at", "") or "", str(batch.get("semester", "?")), {
+            prepared.append((batch.get("saved_at", "") or "", {
                 "batch_id": s.get("batch_id", ""),
-                "semester": str(batch.get("semester", "?")),
+                "batch_semester": str(batch.get("semester", "?")),
                 "scheme": batch.get("scheme", ""),
                 "year": batch.get("year", ""),
                 "department": batch.get("department", ""),
@@ -375,32 +400,42 @@ def fetch_student_record(usn):
             }))
         prepared.sort(key=lambda x: x[0])
 
-        semesters = []
-        index = {}
+        # Group subjects by THEIR OWN semester: VTU returns backlog subjects of
+        # older semesters inside a later exam's result sheet, so the batch's
+        # semester alone would dump everything under one heading. Newest save
+        # wins when the same subject code appears in more than one batch.
         name = ""
-        for _, sem, entry in prepared:
+        groups = {}       # semester(int) -> ordered {code: subject}
+        metas_by_sem = {}  # semester(int) -> [batch entries that fed it, oldest first]
+        for _, entry in prepared:
             if not name and entry.get("name"):
                 name = entry["name"]
-            cur = index.get(sem)
-            if cur is None:
-                index[sem] = entry
-                semesters.append(entry)
-            else:
-                # same semester stored in more than one batch -> merge, don't drop
-                cur["subjects"] = _merge_subjects(cur["subjects"], entry["subjects"])
-                if entry.get("percentage") is not None:
-                    cur["percentage"] = entry["percentage"]
-                if entry.get("result_status"):
-                    cur["result_status"] = entry["result_status"]
-        for entry in semesters:
-            entry.pop("name", None)
+            fallback_sem = _to_semester(entry.get("batch_semester"))
+            for subj in entry["subjects"]:
+                sem = _subject_semester(subj, fallback_sem) or 0
+                bucket = groups.setdefault(sem, {})
+                key = subj.get("code") or subj.get("subject_name") or str(len(bucket))
+                bucket[key] = subj
+                metas_by_sem.setdefault(sem, []).append(entry)
 
-        def sem_sort_key(x):
-            try:
-                return int(x.get("semester", 99))
-            except (ValueError, TypeError):
-                return 99
-        semesters.sort(key=sem_sort_key)
+        semesters = []
+        for sem in sorted(groups.keys()):
+            metas = metas_by_sem.get(sem) or []
+            # prefer metadata of a batch whose own semester matches this block,
+            # otherwise fall back to the newest batch that contributed subjects
+            meta = next((m for m in reversed(metas) if m.get("batch_semester") == str(sem)),
+                        metas[-1] if metas else {})
+            semesters.append({
+                "batch_id": meta.get("batch_id", ""),
+                "semester": str(sem),
+                "scheme": meta.get("scheme", ""),
+                "year": meta.get("year", ""),
+                "department": meta.get("department", ""),
+                "subjects": list(groups[sem].values()),
+                "percentage": meta.get("percentage"),
+                "result_status": meta.get("result_status", ""),
+                "saved_at": meta.get("saved_at", ""),
+            })
 
         return {"usn": usn, "name": name, "semesters": semesters}
     except Exception as e:
@@ -446,42 +481,134 @@ def get_credits(batch_id):
         return {}
 
 
+def _subject_grade(subj):
+    """Grade of a subject (revaluation final grade wins when present)."""
+    grade = subj.get("final_grade") if subj.get("is_revaluated") and subj.get("final_grade") else subj.get("grade", "")
+    if grade:
+        return grade
+    if subj.get("is_revaluated") and subj.get("final_total") is not None:
+        best_total = subj["final_total"]
+    elif subj.get("is_revaluated") and subj.get("final_marks") is not None and subj.get("internal") is not None:
+        best_total = subj["internal"] + subj["final_marks"]
+    else:
+        best_total = subj.get("total")
+    return _grade(best_total) if best_total is not None else ""
+
+
+def _subject_credit(code, credits_map):
+    """Return credits for a subject code, or None when no credit is configured.
+    Zero credits (non-credit courses: NSS / IKS / Yoga) are returned as 0.0."""
+    cr = (credits_map or {}).get(code)
+    if cr is None:
+        return None
+    try:
+        cr = float(cr)
+    except (TypeError, ValueError):
+        return None
+    return cr
+
+
 def compute_sgpa(students, credits_map):
+    """SGPA = Σ(Course Credits × Grade Points) / Σ(Course Credits)
+
+    Every course registered in the semester takes part.  Courses configured with
+    0 credits (VTU non-credit courses such as NSS / IKS / Yoga) add nothing to
+    numerator or denominator.  Subjects with NO credit configured are listed in
+    s["missing_credits"] instead of being silently skipped from the calculation
+    without a trace.
+    """
     for s in students:
-        total_credits = 0
-        total_points = 0
-        cgpa_credits = 0
-        cgpa_points = 0
-        subjects = s.get("subjects", []) or []
-        if isinstance(subjects, str):
-            subjects = json.loads(subjects)
-        for subj in subjects:
+        total_credits = 0.0
+        total_points = 0.0
+        missing = []
+        for subj in _load_json(s.get("subjects", []), []) or []:
             code = subj.get("code", "")
-            cr = credits_map.get(code)
+            cr = _subject_credit(code, credits_map)
             if cr is None:
+                missing.append(code)
                 continue
-            try:
-                cr = float(cr)
-            except (TypeError, ValueError):
+            if cr <= 0:
                 continue
-            grade = subj.get("final_grade") if subj.get("is_revaluated") and subj.get("final_grade") else subj.get("grade", "")
-            if not grade:
-                if subj.get("is_revaluated") and subj.get("final_total") is not None:
-                    best_total = subj["final_total"]
-                elif subj.get("is_revaluated") and subj.get("final_marks") is not None and subj.get("internal") is not None:
-                    best_total = subj["internal"] + subj["final_marks"]
-                else:
-                    best_total = subj.get("total")
-                grade = _grade(best_total) if best_total is not None else ""
-            gp = GRADE_POINTS.get(grade, 0)
+            gp = GRADE_POINTS.get(_subject_grade(subj), 0)
             total_credits += cr
             total_points += gp * cr
-            if gp > 0:
-                cgpa_credits += cr
-                cgpa_points += gp * cr
         s["sgpa"] = round(total_points / total_credits, 2) if total_credits > 0 else None
-        s["cgpa"] = round(cgpa_points / cgpa_credits, 2) if cgpa_credits > 0 else None
+        s["missing_credits"] = missing
     return students
+
+
+def compute_cgpa_map(usns, max_sem=None):
+    """CGPA = Σ(Course Credits × Grade Points) / Σ(Course Credits) for courses
+    EXCLUDING those with an F grade, accumulated over every semester up to
+    max_sem (the semester whose result is being displayed).
+
+    Returns {usn: cgpa}. One query for the whole batch instead of one per student."""
+    usns = [str(u).strip().upper() for u in (usns or []) if u and str(u).strip()]
+    usns = list(dict.fromkeys(usns))
+    if not is_connected() or not usns:
+        return {}
+
+    rows = []
+    try:
+        for i in range(0, len(usns), 200):
+            chunk = usns[i:i + 200]
+            rows += client.table("student_results").select("batch_id,usn,subjects").in_("usn", chunk).execute().data or []
+    except Exception as e:
+        print(f"[Supabase] compute_cgpa_map error: {e}")
+        return {}
+
+    batch_cache = {}
+    entries = {}
+    for r in rows:
+        bid = r.get("batch_id", "")
+        batch = batch_cache.get(bid)
+        if batch is None:
+            batch = fetch_batch(bid) or {}
+            batch_cache[bid] = batch
+        if not batch:
+            continue
+        try:
+            sem = int(batch.get("semester"))
+        except (TypeError, ValueError):
+            sem = 99
+        if max_sem is not None and sem > max_sem:
+            continue
+        entries.setdefault(str(r.get("usn", "")).strip().upper(), []).append(
+            (sem, batch.get("saved_at", "") or "", batch.get("credits") or {},
+             _load_json(r.get("subjects"), []) or [])
+        )
+
+    out = {}
+    for usn, items in entries.items():
+        # chronological so later saves overwrite older ones for the same subject
+        items.sort(key=lambda e: (e[0], e[1]))
+        latest = {}
+        for _, _, credits_map, subjects in items:
+            for subj in subjects:
+                code = subj.get("code", "")
+                if code:
+                    latest[code] = (subj, credits_map)
+
+        pass_credits = 0.0
+        pass_points = 0.0
+        for code, (subj, credits_map) in latest.items():
+            cr = _subject_credit(code, credits_map)
+            if cr is None or cr <= 0:
+                continue
+            grade = _subject_grade(subj)
+            if grade == "F":
+                continue
+            pass_credits += cr
+            pass_points += GRADE_POINTS.get(grade, 0) * cr
+        out[usn] = round(pass_points / pass_credits, 2) if pass_credits > 0 else None
+    return out
+
+
+def compute_cgpa_for_usn(usn, max_sem=None):
+    """Single-student wrapper around compute_cgpa_map()."""
+    if not usn:
+        return None
+    return compute_cgpa_map([usn], max_sem).get(str(usn).strip().upper())
 
 
 def compute_yearly_cgpa(students_sem1, students_sem2, credits_map_sem1, credits_map_sem2):

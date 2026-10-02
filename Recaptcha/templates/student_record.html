@@ -144,9 +144,6 @@ function subjSemOf(sub,fallback){
   if(m){const d=parseInt(m[1],10);if(d>=1&&d<=8)return d;}
   return fallback||0;
 }
-function dateOf(sub){
-  return String((sub&& (sub.announced||sub.announced_on||sub.announced_date||sub.updated_on||sub.date))||"").trim();
-}
 
 $("search_btn").addEventListener("click",search);
 $("usn_input").addEventListener("keydown",e=>{if(e.key==="Enter")search();});
@@ -216,14 +213,12 @@ function render(data){
     groups.get(e.sem).push(e);
   });
   const semList=Array.from(groups.keys()).sort((a,b)=>(b||0)-(a||0));
-  const hasDate=Array.from(byCode.values()).some(e=>!!dateOf(e.sub));
-  const dateHead=hasDate?'<th style="text-align:center">Announced / Updated on</th>':'';
   const tableHead=`<thead><tr>
       <th>Subject Code</th><th>Subject Name</th>
       <th style="text-align:center">Internal Marks</th>
       <th style="text-align:center">External Marks</th>
       <th style="text-align:center">Total</th>
-      <th style="text-align:center">Result</th>${dateHead}
+      <th style="text-align:center">Result</th>
     </tr></thead>`;
 
   function rowsHtml(list){
@@ -247,7 +242,6 @@ function render(data){
       const resCell=isRv
         ?`<td style="text-align:center"><span class="vtu-old">${origRes||"—"}</span> <span class="${pass?'sr-pill-pass':'sr-pill-fail'}">${bestRes||"—"}</span></td>`
         :`<td style="text-align:center"><span class="${pass?'sr-pill-pass':'sr-pill-fail'}">${bestRes||"—"}</span></td>`;
-      const dateCell=hasDate?`<td class="sr-marks" style="font-size:.75rem;font-weight:600;">${dateOf(sub)||"—"}</td>`:'';
       r+=`<tr>
         <td style="font-family:monospace;font-weight:600;">${sub.code||""}${rvBadge}</td>
         <td>${sub.subject_name||""}</td>
@@ -255,7 +249,6 @@ function render(data){
         ${extCell}
         ${totCell}
         ${resCell}
-        ${dateCell}
       </tr>`;
     });
     return r;
@@ -267,10 +260,10 @@ function render(data){
 
   semList.forEach(n=>{
     const list=groups.get(n);
-    // current exam = subject belongs to the result block it was saved under
-    const current=list.filter(e=>!e.src||e.src===e.sem);
-    // backlog exam = subject of an older semester written in a later exam
-    const backlog=list.filter(e=>e.src&&e.src!==e.sem);
+    // main table = subjects cleared this time; F subjects go to a separate backlog table
+    const resOf=sub=>(sub.is_revaluated&&sub.final_result?sub.final_result:sub.result)||"";
+    const current=list.filter(e=>resOf(e.sub)!=="F");
+    const backlog=list.filter(e=>resOf(e.sub)==="F");
     h+=`<div class="vtu-block"><div class="vtu-sem-title">Semester: ${n||"—"}</div>`;
     if(current.length){
       h+=`<div class="tbl-wrap"><table class="sr-subj-table">${tableHead}<tbody>${rowsHtml(current)}</tbody></table></div>`;
