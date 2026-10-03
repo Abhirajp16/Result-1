@@ -191,6 +191,41 @@ select option { font-weight: 500; color: var(--ink); background: var(--card); }
 .cdrop-opt.sel { background: var(--forest); color: #fff; font-weight: 700; }
 .cdrop-opt.sel::after { content: "✓"; margin-left: auto; font-weight: 800; }
 .cdrop-opt.sel:hover { background: var(--pine); }
+
+/* ── Hierarchical batch picker (one box: Dept ▸ Year ▸ Semester) ── */
+.hsel { position: relative; width: 100%; }
+.hsel-btn {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 10px 14px; border: 1px solid #D1D5DB; border-radius: 10px;
+  background: #fff; font: inherit; font-size: 13px; font-weight: 600; color: #1F2937;
+  cursor: pointer; text-align: left; transition: border-color .2s, box-shadow .2s;
+}
+.hsel-btn:hover { border-color: var(--forest); }
+.hsel-btn:focus-visible { outline: none; border-color: var(--forest); box-shadow: 0 0 0 3px rgba(28,122,94,.15); }
+.hsel-btn .hsel-lbl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hsel-btn .hsel-ph { color: #9CA3AF; font-weight: 500; }
+.hsel-btn .chev { flex: 0 0 auto; color: var(--forest); transition: transform .2s ease; }
+.hsel.open .chev { transform: rotate(180deg); }
+.hsel-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 90;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: var(--shadow-lg); max-height: 300px; overflow-y: auto;
+  padding: 6px; display: none;
+}
+.hsel.open .hsel-menu { display: block; animation: fadeUp .15s ease; }
+.hsel-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px; border-radius: 8px; cursor: pointer;
+  font-size: 13.5px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hsel-row .hsel-arrow { flex: 0 0 auto; width: 12px; font-size: 10px; color: #9CA3AF; }
+.hsel-row.dept { font-size: 12.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--forest); }
+.hsel-row.year { font-weight: 700; color: #374151; }
+.hsel-row:hover { background: var(--accent-soft); color: var(--pine); }
+.hsel-row.leaf.sel { background: var(--forest); color: #fff; }
+.hsel-row.leaf.sel:hover { background: var(--pine); }
+.hsel-empty { padding: 12px; font-size: 13px; color: var(--muted); }
 .cdrop-menu::-webkit-scrollbar { width: 8px; }
 .cdrop-menu::-webkit-scrollbar-thumb { background: #CBD8D1; border-radius: 99px; }
 .cdrop-menu::-webkit-scrollbar-track { background: transparent; }
@@ -596,6 +631,16 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
         </select>
       </div>
       <div>
+        <label style="display:block;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;">Range generator</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <input id="rv_prefix" placeholder="1GD24CS" style="flex:1.2;min-width:105px;padding:9px 12px;border:1px solid #D1D5DB;border-radius:10px;font-size:13px;font-family:'SF Mono',Consolas,monospace;text-transform:uppercase;background:#fff;color:#1F2937;outline:none;transition:border-color .2s;" onfocus="this.style.borderColor='#10B981';this.style.boxShadow='0 0 0 3px rgba(16,185,129,.15)'" onblur="this.style.borderColor='#D1D5DB';this.style.boxShadow=''">
+          <input id="rv_range_from" placeholder="From" min="1" max="999" style="flex:0.8;min-width:70px;padding:9px 12px;border:1px solid #D1D5DB;border-radius:10px;font-size:13px;font-family:'SF Mono',Consolas,monospace;text-transform:uppercase;background:#fff;color:#1F2937;outline:none;transition:border-color .2s;" onfocus="this.style.borderColor='#10B981';this.style.boxShadow='0 0 0 3px rgba(16,185,129,.15)'" onblur="this.style.borderColor='#D1D5DB';this.style.boxShadow=''">
+          <input id="rv_range_to" placeholder="To" min="1" max="999" style="flex:0.8;min-width:70px;padding:9px 12px;border:1px solid #D1D5DB;border-radius:10px;font-size:13px;font-family:'SF Mono',Consolas,monospace;text-transform:uppercase;background:#fff;color:#1F2937;outline:none;transition:border-color .2s;" onfocus="this.style.borderColor='#10B981';this.style.boxShadow='0 0 0 3px rgba(16,185,129,.15)'" onblur="this.style.borderColor='#D1D5DB';this.style.boxShadow=''">
+          <button class="btn ghost" id="rv_gen_btn" style="border:1px solid #A7F3D0;color:#059669;background:#fff;padding:9px 16px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;transition:background .15s;" onmouseover="this.style.background='#ECFDF5'" onmouseout="this.style.background='#fff'">Generate</button>
+        </div>
+        <div id="rv_gen_preview" style="font-size:11px;color:#6B7280;margin-top:5px;">Tip: From/To take 1–999, or full USNs like 1GD24CS001</div>
+      </div>
+      <div>
         <label style="display:block;font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;">Student USNs</label>
         <textarea id="rv_usns" rows="3" placeholder="Enter USNs (one per line or comma separated)"
                   style="width:100%;padding:10px 14px;border:1px solid #D1D5DB;border-radius:10px;font-size:13px;resize:vertical;font-family:'SF Mono',Consolas,monospace;background:#fff;color:#1F2937;outline:none;transition:border-color .2s;" onfocus="this.style.borderColor='#10B981';this.style.boxShadow='0 0 0 3px rgba(16,185,129,.15)'" onblur="this.style.borderColor='#D1D5DB';this.style.boxShadow=''"></textarea>
@@ -903,7 +948,7 @@ function syncAllCustomSelects() {
   });
 }
 
-["an_batch_sel", "flt_dept", "flt_sem", "flt_scheme", "flt_year", "page_size", "db_batch_sel"].forEach(id => enhanceSelect($(id)));
+["flt_dept", "flt_sem", "flt_scheme", "flt_year", "page_size"].forEach(id => enhanceSelect($(id)));
 
 /* ---------------- tabs ---------------- */
 document.querySelectorAll(".tab-btn").forEach(btn => {
@@ -1021,19 +1066,179 @@ $("save_db_btn").addEventListener("click", () => {
 });
 $("db_cancel_btn").addEventListener("click", () => $("db_modal").classList.remove("open"));
 
-function populateDbBatchSel() {
-  const sel = $("db_batch_sel");
-  const prev = sel.value;
-  sel.innerHTML = '<option value="">— create a new batch —</option>';
-  batches.forEach(b => {
-    const o = document.createElement("option");
-    o.value = b.id;
-    o.textContent = `${b.department || "?"} — Sem ${b.semester || "?"} — ${b.scheme || "?"} — ${b.year || "?"} (${b.student_count} students)`;
-    sel.appendChild(o);
+/* ── Expandable hierarchical batch picker — ONE dropdown: Dept ▸ Year ▸ Semester ──
+   Dept / Year rows only expand-collapse. Only a Semester row selects a batch id. */
+const hierMap = new WeakMap();
+
+const hEsc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function buildBatchTree(list) {
+  const num = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true });
+  const depts = [];
+  const dIdx = new Map();
+
+  [...list].sort((a, b) =>
+    String(a.department || "?").localeCompare(String(b.department || "?")) ||
+    num(a.scheme || "?", b.scheme || "?") ||
+    num(a.year || "?", b.year || "?") ||
+    (parseInt(a.semester, 10) || 0) - (parseInt(b.semester, 10) || 0)
+  ).forEach(b => {
+    const dName = b.department || "?";
+    let d = dIdx.get(dName);
+    if (!d) { d = { name: dName, years: [], yIdx: new Map() }; dIdx.set(dName, d); depts.push(d); }
+    const scheme = String(b.scheme || "?");
+    const year = String(b.year || "");
+    const yKey = scheme + "|" + year;
+    let y = d.yIdx.get(yKey);
+    if (!y) { y = { key: yKey, label: year ? (scheme + " — " + year) : scheme, sems: [] }; d.yIdx.set(yKey, y); d.years.push(y); }
+    y.sems.push({
+      id: b.id,
+      label: "Sem " + (b.semester || "?") + " (" + (b.student_count || 0) + " students)",
+      dept: dName, yearKey: yKey, yearLabel: y.label
+    });
   });
-  if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  depts.forEach(d => delete d.yIdx);
+  return depts;
+}
+
+function findHierLeaf(tree, id) {
+  if (!id) return null;
+  for (const d of tree) for (const y of d.years) for (const s of y.sems) if (s.id === id) return s;
+  return null;
+}
+
+function hierSelectFor(sel, placeholderText) {
+  let inst = hierMap.get(sel);
+  if (inst) { inst.placeholder = placeholderText; return inst; }
+
+  sel.style.display = "none";
+  const wrap = document.createElement("div");
+  wrap.className = "hsel";
+  if (sel.style.maxWidth) wrap.style.maxWidth = sel.style.maxWidth;
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "hsel-btn";
+  const lbl = document.createElement("span");
+  lbl.className = "hsel-lbl hsel-ph";
+  lbl.textContent = placeholderText;
+  btn.appendChild(lbl);
+  btn.insertAdjacentHTML("beforeend",
+    '<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>');
+  const menu = document.createElement("div");
+  menu.className = "hsel-menu";
+  wrap.appendChild(btn);
+  wrap.appendChild(menu);
+  sel.insertAdjacentElement("afterend", wrap);
+
+  inst = { sel, wrap, btn, lbl, menu, placeholder: placeholderText, tree: [], expanded: new Set() };
+
+  const key = (kind, k) => kind + ":" + k;
+  const isOpen = () => wrap.classList.contains("open");
+  const onDocClick = () => inst.setOpen(false);
+
+  inst.render = () => {
+    const cur = sel.value;
+    const arrow = open => (open ? "▼" : "▶");
+    let html = "";
+    inst.tree.forEach(d => {
+      const dOpen = inst.expanded.has(key("d", d.name));
+      html += '<div class="hsel-row dept" data-kind="d" data-key="' + hEsc(d.name) + '" style="padding-left:10px">' +
+              '<span class="hsel-arrow">' + arrow(dOpen) + '</span>' + hEsc(d.name) + '</div>';
+      if (!dOpen) return;
+      d.years.forEach(y => {
+        const yk = d.name + "|" + y.key;
+        const yOpen = inst.expanded.has(key("y", yk));
+        html += '<div class="hsel-row year" data-kind="y" data-key="' + hEsc(yk) + '" style="padding-left:26px">' +
+                '<span class="hsel-arrow">' + arrow(yOpen) + '</span>' + hEsc(y.label) + '</div>';
+        if (!yOpen) return;
+        y.sems.forEach(s => {
+          const on = s.id === cur;
+          html += '<div class="hsel-row leaf' + (on ? " sel" : "") + '" data-kind="l" data-id="' + hEsc(s.id) + '" style="padding-left:46px">' +
+                  '<span class="hsel-arrow">' + (on ? "✓" : "") + '</span>' + hEsc(s.label) + '</div>';
+        });
+      });
+    });
+    menu.innerHTML = html || '<div class="hsel-empty">No saved batches yet</div>';
+  };
+
+  inst.syncLabel = () => {
+    const leaf = findHierLeaf(inst.tree, sel.value);
+    if (leaf) { lbl.className = "hsel-lbl"; lbl.textContent = leaf.dept + " · " + leaf.yearLabel + " · " + leaf.label; }
+    else { lbl.className = "hsel-lbl hsel-ph"; lbl.textContent = inst.placeholder; }
+  };
+
+  inst.setOpen = open => {
+    if (open === isOpen()) { if (!open) document.removeEventListener("click", onDocClick); return; }
+    if (open) {
+      const cur = findHierLeaf(inst.tree, sel.value);
+      if (cur) { inst.expanded.add(key("d", cur.dept)); inst.expanded.add(key("y", cur.yearKey)); }
+      inst.render();
+      wrap.classList.add("open");
+      document.addEventListener("click", onDocClick);
+    } else {
+      wrap.classList.remove("open");
+      document.removeEventListener("click", onDocClick);
+    }
+  };
+
+  menu.addEventListener("click", e => {
+    const row = e.target.closest(".hsel-row");
+    if (!row) return;
+    e.stopPropagation();
+    const kind = row.dataset.kind;
+    if (kind === "l") {                                  // semester = selectable batch
+      const id = row.dataset.id;
+      if (sel.value !== id) { sel.value = id; sel.dispatchEvent(new Event("change", { bubbles: true })); }
+      inst.syncLabel();
+      inst.setOpen(false);
+      return;
+    }
+    const k = key(kind, row.dataset.key);                // dept / year = expand-collapse only
+    if (inst.expanded.has(k)) inst.expanded.delete(k); else inst.expanded.add(k);
+    inst.render();
+  });
+
+  btn.addEventListener("click", e => { e.stopPropagation(); inst.setOpen(!isOpen()); });
+  sel.addEventListener("change", () => inst.syncLabel());
+
+  hierMap.set(sel, inst);
+  return inst;
+}
+
+function fillHierSelect(sel, placeholderText) {
+  if (!sel) return;
+  const inst = hierSelectFor(sel, placeholderText);
+  const prev = sel.value;
+  const tree = buildBatchTree(batches);
+  inst.tree = tree;
+
+  // hidden native select keeps the real batch ids so every .value reader works unchanged
+  sel.innerHTML = "";
+  const ph = document.createElement("option");
+  ph.value = "";
+  ph.textContent = placeholderText;
+  sel.appendChild(ph);
+  tree.forEach(d => d.years.forEach(y => y.sems.forEach(s => {
+    const o = document.createElement("option");
+    o.value = s.id;
+    o.textContent = s.label;
+    sel.appendChild(o);
+  })));
+  if (prev && findHierLeaf(tree, prev)) sel.value = prev; else sel.value = "";
+
+  inst.render();
+  inst.syncLabel();
+}
+
+function syncHierLabel(sel) {
+  const inst = hierMap.get(sel);
+  if (inst) inst.syncLabel();
+}
+
+function populateDbBatchSel() {
+  fillHierSelect($("db_batch_sel"), "— create a new batch —");
   updateMergeUI();
-  syncAllCustomSelects();
 }
 
 function updateMergeUI() {
@@ -1179,15 +1384,30 @@ function rvLogMsg(msg) {
 }
 
 function rvPopulateBatches() {
-  const sel = $("rv_batch_sel");
-  sel.innerHTML = '<option value="">— select batch —</option>';
-  batches.forEach(b => {
-    const o = document.createElement("option");
-    o.value = b.id;
-    o.textContent = (b.department || "?") + " Sem " + (b.semester || "?") + " " + (b.scheme || "") + " (" + (b.student_count || 0) + ")";
-    sel.appendChild(o);
-  });
+  fillHierSelect($("rv_batch_sel"), "— select batch —");
 }
+
+$("rv_gen_btn").addEventListener("click", () => {
+  let prefix = $("rv_prefix").value.trim().toUpperCase();
+  let fromRaw = $("rv_range_from").value.trim().toUpperCase();
+  let toRaw = $("rv_range_to").value.trim().toUpperCase();
+  // From/To may be plain numbers (1-999) or full USNs like 1GD24CS001
+  const FULL_USN = /^\d[A-Z]{2}\d{2}[A-Z]{2}\d{3}$/;
+  let from, to;
+  if (FULL_USN.test(fromRaw)) { prefix = prefix || fromRaw.slice(0, 7); from = parseInt(fromRaw.slice(7), 10); }
+  else from = parseInt(fromRaw, 10);
+  if (FULL_USN.test(toRaw)) { prefix = prefix || toRaw.slice(0, 7); to = parseInt(toRaw.slice(7), 10); }
+  else to = parseInt(toRaw, 10);
+  if (!/^\d[A-Z]{2}\d{2}[A-Z]{2}$/.test(prefix)) { toast("Invalid prefix — expected format like 1GD24CS"); return; }
+  if (!from || !to || from < 1 || to < from || to > 999) { toast("Invalid range — use 1 to 999"); return; }
+  const generated = [];
+  for (let i = from; i <= to; i++) generated.push(prefix + String(i).padStart(3, "0"));
+  const existing = validateUSNs($("rv_usns").value).valid;
+  const merged = [...new Set(existing.concat(generated))];
+  $("rv_usns").value = merged.join("\n");
+  $("rv_gen_preview").textContent = `${to - from + 1} USN(s) added — ${prefix}${String(from).padStart(3, "0")} – ${prefix}${String(to).padStart(3, "0")} · ${merged.length} total in list`;
+  toast("Added " + (to - from + 1) + " USN(s) to the reval list");
+});
 
 $("rv_start_btn").addEventListener("click", () => {
   const url = $("rv_url").value.trim();
@@ -1423,12 +1643,7 @@ function renderRevalCompare(data) {
   html += '<div style="font-size:12px;color:#6B7280;font-weight:600;">' + autoImproved + ' subject(s) will be updated</div>';
   html += '<div style="margin-left:auto;display:flex;gap:10px;align-items:center;">';
   html += '<label style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.06em;">Store in:</label>';
-  html += '<select id="rv_update_batch" style="padding:9px 14px;border:1px solid #D1D5DB;border-radius:10px;font-size:13px;background:#fff;color:#1F2937;outline:none;transition:border-color .2s;">';
-  html += '<option value="">— select batch —</option>';
-  batches.forEach(b => {
-    html += '<option value="' + b.id + '">' + (b.department || "?") + " Sem " + (b.semester || "?") + " " + (b.scheme || "") + " (" + (b.student_count || 0) + ')</option>';
-  });
-  html += '</select>';
+  html += '<select id="rv_update_batch" style="padding:9px 14px;border:1px solid #D1D5DB;border-radius:10px;font-size:13px;background:#fff;color:#1F2937;outline:none;transition:border-color .2s;max-width:340px;"><option value="">— select batch —</option></select>';
   html += '<button class="btn" onclick="rvUpdateStore(\'' + (data.usn || "") + '\')" style="background:linear-gradient(135deg,#10B981,#059669);color:#fff;border:none;padding:9px 20px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(5,150,105,.3);transition:transform .15s,box-shadow .15s;" onmouseover="this.style.transform=\'translateY(-1px)\';this.style.boxShadow=\'0 4px 12px rgba(5,150,105,.4)\'" onmouseout="this.style.transform=\'\';this.style.boxShadow=\'0 2px 8px rgba(5,150,105,.3)\'">Update & Store</button>';
   html += '</div>';
   html += '</div>';
@@ -1436,6 +1651,7 @@ function renderRevalCompare(data) {
   html += '</div>'; /* white card */
 
   area.innerHTML = html;
+  fillHierSelect($("rv_update_batch"), "— select batch —");
 }
 
 function rvUpdateStore(usn) {
@@ -1473,21 +1689,14 @@ socket.on("batches", data => {
   $("stat_batches").textContent = batches.length;
 
   const sel = $("an_batch_sel");
-  const prev = sel.value;
-  sel.innerHTML = '<option value="">— select a saved batch —</option>';
-  batches.forEach(b => {
-    const o = document.createElement("option");
-    o.value = b.id;
-    o.textContent = `${b.department || "?"} — Sem ${b.semester || "?"} — ${b.scheme || "?"} — ${b.year || "?"} (${b.student_count} students)`;
-    sel.appendChild(o);
-  });
+  fillHierSelect(sel, "— select a saved batch —");   // hierarchy tree, keeps current selection
   $("an_empty").style.display = batches.length ? "none" : "block";
-  if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
   if (window._pendingBatchId) {
     var pb = window._pendingBatchId;
     window._pendingBatchId = null;
     if (batches.some(b => b.id === pb)) {
       sel.value = pb;
+      syncHierLabel(sel);
       currentBatch = pb;
       syncAllCustomSelects();
       delete batchStudents[pb];
@@ -1499,6 +1708,7 @@ socket.on("batches", data => {
   } else if (currentBatch) {
     currentBatch = null;
     sel.value = "";
+    syncHierLabel(sel);
     $("an_content").style.display = "none";
   }
   populateFilters();

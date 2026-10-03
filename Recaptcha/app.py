@@ -591,7 +591,7 @@ def run_scraper(vtu_url, total_usns, run_id):
 # MONGODB EVENTS
 # -----------------------------------------
 @socketio.on("get-db-status")
-def get_db_status():
+def get_db_status(data=None):
     emit("db-status", {"connected": db.is_connected(), "message": db.status_msg})
 
 
