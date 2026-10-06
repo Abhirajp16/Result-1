@@ -268,6 +268,42 @@ def merge_into_batch(batch_id, batch_doc, student_docs):
         return None, str(e), False, 0, 0
 
 
+def create_batch(department, year, scheme, semester):
+    """Create an EMPTY batch (no students yet) so fetched VTU results can be
+    stored into it later. Same key as save_batch uses (year, scheme,
+    semester, department), so if it already exists we return that id instead
+    of making a duplicate row.
+    Returns (batch_id, created, error)."""
+    if not is_connected():
+        return None, False, "Supabase not connected"
+    department = str(department or "").strip()
+    year = str(year or "").strip()
+    scheme = str(scheme or "").strip()
+    semester = str(semester or "").strip()
+    if not (department and year and scheme and semester):
+        return None, False, "year, scheme, semester and department are all required"
+    try:
+        existing = client.table("fetch_batches").select("id").eq("year", year) \
+            .eq("scheme", scheme).eq("semester", semester).eq("department", department).execute()
+        rows = existing.data or []
+        if rows:
+            return rows[0]["id"], False, None
+
+        result = client.table("fetch_batches").insert({
+            "year": year,
+            "scheme": scheme,
+            "semester": semester,
+            "department": department,
+            "subjects": [],
+            "credits": {},
+            "student_count": 0,
+            "saved_at": _now(),
+        }).execute()
+        return result.data[0]["id"], True, None
+    except Exception as e:
+        return None, False, str(e)
+
+
 def fetch_batches(limit=100):
     if not is_connected():
         return []

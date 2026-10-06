@@ -825,6 +825,46 @@ def save_to_db(data):
         })
 
 
+@socketio.on("create-batch")
+def create_batch(data):
+    """Create an empty batch from the '➕ Create New Batch' option in the
+    Save-to-Database dropdown. Writes the batch row only (no results yet)."""
+    def fail(msg):
+        emit("batch-created", {"ok": False, "error": msg})
+        emit("log-message", {"data": f"[DB ERROR] {msg}\n"})
+
+    department = str(data.get("department", "")).strip()
+    year = str(data.get("year", "")).strip()
+    scheme = str(data.get("scheme", "")).strip()
+    semester = str(data.get("semester", "")).strip()
+
+    if not db.is_connected():
+        return fail(f"MongoDB not available: {db.status_msg}")
+    if not (year and scheme and semester and department):
+        return fail("Year, Scheme, Semester and Department are all required.")
+
+    batch_id, created, err = db.create_batch(department, year, scheme, semester)
+    if batch_id is None:
+        return fail(err or "Could not create the batch.")
+
+    label = f"{department} · {scheme} — {year} · Sem {semester}"
+    if created:
+        emit("log-message", {"data": f"[DB] Created new batch {label} ({batch_id}).\n"})
+    else:
+        emit("log-message", {"data": f"[DB] Batch {label} already exists — selecting the existing one.\n"})
+
+    # refresh every open tab first so the new batch is already in the tree
+    # when batch-created runs client-side
+    socketio.emit("batches", {"batches": db.fetch_batches(), "error": None})
+    emit("batch-created", {
+        "ok": True,
+        "created": bool(created),
+        "batch_id": str(batch_id),
+        "department": department, "scheme": scheme,
+        "year": year, "semester": semester,
+    })
+
+
 @socketio.on("get-batches")
 def get_batches():
     if not db.is_connected():

@@ -226,6 +226,8 @@ select option { font-weight: 500; color: var(--ink); background: var(--card); }
 .hsel-row.leaf.sel { background: var(--forest); color: #fff; }
 .hsel-row.leaf.sel:hover { background: var(--pine); }
 .hsel-empty { padding: 12px; font-size: 13px; color: var(--muted); }
+.hsel-row.foot { border-top: 1px dashed var(--line); margin-top: 4px; padding-top: 11px; font-weight: 800; color: var(--pine); }
+.hsel-row.foot:hover { background: var(--accent-soft); }
 .cdrop-menu::-webkit-scrollbar { width: 8px; }
 .cdrop-menu::-webkit-scrollbar-thumb { background: #CBD8D1; border-radius: 99px; }
 .cdrop-menu::-webkit-scrollbar-track { background: transparent; }
@@ -692,7 +694,7 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
       <div style="flex:0 0 auto;"><button class="btn ghost" id="an_refresh_btn">Refresh</button></div>
       <div style="flex:0 0 auto;"><button class="btn warn" id="an_delete_btn" style="display:none;">Delete Batch</button></div>
     </div>
-    <div id="an_empty" style="color:var(--muted);margin-top:14px;">No batches saved yet. Fetch results and use "Save to Database".</div>
+    <div id="an_empty" style="display:none;color:var(--muted);margin-top:14px;">No batches saved yet. Fetch results and use "Save to Database".</div>
   </div>
 
   <div id="an_content" style="display:none;">
@@ -810,6 +812,42 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
     <div class="row">
       <button class="btn ghost" id="db_cancel_btn" style="flex:0 0 auto;">Cancel</button>
       <button class="btn" id="db_save_btn" style="flex:0 0 auto;">Save batch</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= CREATE NEW BATCH MODAL ================= -->
+<div class="modal-overlay" id="nb_modal">
+  <div class="modal">
+    <h3 style="margin:0 0 4px;">Create New Batch</h3>
+    <p style="color:var(--muted);font-size:13px;margin:0 0 18px;">Adds an empty batch to the database. It appears straight away in the "Store into" list — fetch VTU results and use <b>Save to Database</b> to fill it.</p>
+    <div class="row" style="margin-bottom:14px;">
+      <div><label class="lbl">Year</label><input type="text" id="nb_year" placeholder="2025"></div>
+      <div><label class="lbl">Scheme</label><input type="text" id="nb_scheme" placeholder="2022"></div>
+    </div>
+    <div class="row" style="margin-bottom:14px;">
+      <div><label class="lbl">Semester</label><input type="text" id="nb_semester" placeholder="3"></div>
+      <div><label class="lbl">Department</label><input type="text" id="nb_department" placeholder="CSE"></div>
+    </div>
+    <div id="nb_error" style="display:none;color:#ef4444;font-size:12.5px;font-weight:600;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px 12px;margin-bottom:14px;"></div>
+    <div class="row">
+      <button class="btn ghost" id="nb_cancel_btn" style="flex:0 0 auto;">Cancel</button>
+      <button class="btn" id="nb_create_btn" style="flex:0 0 auto;">Create batch</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ Compute Yearly CGPA — SGPA input modal ============ -->
+<div class="modal-overlay" id="cgpa_modal">
+  <div class="modal" style="width:520px;max-height:88vh;overflow-y:auto;">
+    <h3 style="margin:0 0 4px;">Compute Yearly CGPA</h3>
+    <p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Enter the SGPA you scored in each completed semester. Leave the rest empty — only the semesters you fill in are used. CGPA is credit-weighted (F-grade courses excluded), not a simple average.</p>
+    <div id="cgpa_sgpa_fields" style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-bottom:14px;"></div>
+    <div id="cgpa_error" style="display:none;color:#ef4444;font-size:12.5px;font-weight:600;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:8px 10px;margin-bottom:12px;"></div>
+    <div id="cgpa_result" style="display:none;margin-bottom:16px;"></div>
+    <div class="row">
+      <button class="btn ghost" id="cgpa_cancel_btn" style="flex:0 0 auto;">Cancel</button>
+      <button class="btn" id="cgpa_go_btn" style="flex:0 0 auto;background:linear-gradient(135deg,#2563EB,#1D4ED8);color:#fff;border-color:transparent;">Calculate CGPA</button>
     </div>
   </div>
 </div>
@@ -1107,9 +1145,9 @@ function findHierLeaf(tree, id) {
   return null;
 }
 
-function hierSelectFor(sel, placeholderText) {
+function hierSelectFor(sel, placeholderText, footer) {
   let inst = hierMap.get(sel);
-  if (inst) { inst.placeholder = placeholderText; return inst; }
+  if (inst) { inst.placeholder = placeholderText; inst.footer = footer || null; return inst; }
 
   sel.style.display = "none";
   const wrap = document.createElement("div");
@@ -1131,7 +1169,7 @@ function hierSelectFor(sel, placeholderText) {
   wrap.appendChild(menu);
   sel.insertAdjacentElement("afterend", wrap);
 
-  inst = { sel, wrap, btn, lbl, menu, placeholder: placeholderText, tree: [], expanded: new Set() };
+  inst = { sel, wrap, btn, lbl, menu, placeholder: placeholderText, tree: [], expanded: new Set(), footer: footer || null };
 
   const key = (kind, k) => kind + ":" + k;
   const isOpen = () => wrap.classList.contains("open");
@@ -1159,7 +1197,12 @@ function hierSelectFor(sel, placeholderText) {
         });
       });
     });
-    menu.innerHTML = html || '<div class="hsel-empty">No saved batches yet</div>';
+    if (!html) html = '<div class="hsel-empty">No saved batches yet</div>';
+    if (inst.footer) {                       /* e.g. ➕ Create New Batch, always last */
+      html += '<div class="hsel-row foot" data-kind="f" style="padding-left:12px">' +
+              '<span class="hsel-arrow"></span>' + hEsc(inst.footer.label) + '</div>';
+    }
+    menu.innerHTML = html;
   };
 
   inst.syncLabel = () => {
@@ -1194,6 +1237,11 @@ function hierSelectFor(sel, placeholderText) {
       inst.setOpen(false);
       return;
     }
+    if (kind === "f") {                                  // footer action (Create New Batch)
+      inst.setOpen(false);
+      if (inst.footer && typeof inst.footer.onClick === "function") inst.footer.onClick();
+      return;
+    }
     const k = key(kind, row.dataset.key);                // dept / year = expand-collapse only
     if (inst.expanded.has(k)) inst.expanded.delete(k); else inst.expanded.add(k);
     inst.render();
@@ -1206,9 +1254,9 @@ function hierSelectFor(sel, placeholderText) {
   return inst;
 }
 
-function fillHierSelect(sel, placeholderText) {
+function fillHierSelect(sel, placeholderText, footer) {
   if (!sel) return;
-  const inst = hierSelectFor(sel, placeholderText);
+  const inst = hierSelectFor(sel, placeholderText, footer);
   const prev = sel.value;
   const tree = buildBatchTree(batches);
   inst.tree = tree;
@@ -1237,7 +1285,8 @@ function syncHierLabel(sel) {
 }
 
 function populateDbBatchSel() {
-  fillHierSelect($("db_batch_sel"), "— create a new batch —");
+  fillHierSelect($("db_batch_sel"), "— create a new batch —",
+    { label: "➕ Create New Batch", onClick: openNewBatchModal });
   updateMergeUI();
 }
 
@@ -1270,6 +1319,66 @@ $("db_save_btn").addEventListener("click", () => {
   socket.emit("save-to-db", payload);
   $("db_modal").classList.remove("open");
   logMsg(target ? `[DB] Merging current fetch into batch ${target}…\n` : "[DB] Saving batch to MongoDB…\n");
+});
+
+/* ---------------- create new batch (Store into → ➕ Create New Batch) ---------------- */
+function openNewBatchModal() {
+  ["nb_year", "nb_scheme", "nb_semester", "nb_department"].forEach(id => { $(id).value = ""; });
+  $("nb_error").style.display = "none";
+  $("nb_create_btn").disabled = false;
+  $("nb_create_btn").textContent = "Create batch";
+  $("nb_modal").classList.add("open");
+  setTimeout(() => { const f = $("nb_department"); if (f) f.focus(); }, 60);
+}
+
+function nbFail(msg) {
+  const e = $("nb_error");
+  e.textContent = msg;
+  e.style.display = "block";
+  $("nb_create_btn").disabled = false;
+  $("nb_create_btn").textContent = "Create batch";
+}
+
+$("nb_cancel_btn").addEventListener("click", () => $("nb_modal").classList.remove("open"));
+$("nb_modal").addEventListener("click", e => { if (e.target === $("nb_modal")) $("nb_modal").classList.remove("open"); });
+
+$("nb_create_btn").addEventListener("click", () => {
+  const payload = {
+    year: $("nb_year").value.trim(),
+    scheme: $("nb_scheme").value.trim(),
+    semester: $("nb_semester").value.trim(),
+    department: $("nb_department").value.trim(),
+  };
+  if (!payload.year || !payload.scheme || !payload.semester || !payload.department) {
+    nbFail("Year, Scheme, Semester and Department are all required.");
+    return;
+  }
+  $("nb_error").style.display = "none";
+  $("nb_create_btn").disabled = true;
+  $("nb_create_btn").textContent = "Creating…";
+  socket.emit("create-batch", payload);
+});
+
+socket.on("batch-created", data => {
+  if (!data.ok) { nbFail(data.error || "Could not create the batch."); return; }
+  $("nb_modal").classList.remove("open");
+
+  /* the fresh list has already arrived (server emits "batches" first) —
+     expand Dept → Year so the new batch is visible, and select it only if
+     nothing else is picked yet, so an existing selection is never changed */
+  const sel = $("db_batch_sel");
+  const inst = hierMap.get(sel);
+  if (inst) {
+    inst.expanded.add("d:" + data.department);
+    inst.expanded.add("y:" + data.department + "|" + data.scheme + "|" + data.year);
+    if (!sel.value && data.batch_id) sel.value = data.batch_id;
+    inst.render();
+    inst.syncLabel();
+    updateMergeUI();
+  }
+  const label = data.department + " · " + data.scheme + " — " + data.year + " · Sem " + data.semester;
+  toast(data.created ? "Batch created: " + label : "Batch already exists: " + label);
+  logMsg("[DB] " + (data.created ? "New batch ready: " : "Existing batch found: ") + label + "\n");
 });
 
 /* ---------------- socket events ---------------- */
@@ -1715,6 +1824,7 @@ socket.on("batches", data => {
   applyBrowseFilters();
   populateDbBatchSel();
   rvPopulateBatches();
+  buildCreditsRow();   /* Fix A: refresh boxes when the batch list (and its saved credits) refreshes */
 
   /* Fetch student data for ALL batches so Browse tab shows data */
   batches.forEach(b => {
@@ -1845,6 +1955,73 @@ function toggleSubjFailFilter() {
   if (pfVal) pfVal.textContent = _subjFailOnly ? filtered.length + ' failed' : _subjModalList.filter(function(x){return x.pass;}).length + ' / ' + _subjModalList.filter(function(x){return !x.pass;}).length;
 }
 
+/* Subject-credit boxes.
+   Fix A: rebuilt whenever the batch's data arrives (batch-results) or the
+          batch list refreshes — so the row is never empty after a page load
+          and never keeps the previous batch's subjects.
+   Fix B: the codes are the UNION of every student's subjects in the batch,
+          not just the first student's — otherwise subjects like BCS613A have
+          no box and get wiped from the credits map on "Save Credits & SGPA". */
+/* Semester a subject belongs to — same rule as the student-record page:
+   stored subject_semester first, else the first digit after the letters
+   (BCS601 -> 6, BCSL606 -> 6, BMATS201 -> 2), else the batch's semester. */
+function subjectSemester(sub, fallback) {
+  var stored = parseInt(sub.subject_semester, 10);
+  if (stored >= 1 && stored <= 8) return stored;
+  var m = /^[A-Za-z]+(\d)/.exec(String(sub.code || ""));
+  if (m) { var n = parseInt(m[1], 10); if (n >= 1 && n <= 8) return n; }
+  return fallback;
+}
+
+function buildCreditsRow() {
+  var row = $("an_credits_row");
+  if (!row) return;
+  var b = batches.find(x => x.id === currentBatch);
+  var st = batchStudents[currentBatch];
+  if (!b || !st || !st.length) {
+    row.innerHTML = '<span style="font-size:12px;color:#6b7280;">Loading subjects for this batch…</span>';
+    return;
+  }
+  var fbSem = parseInt(b.semester, 10);
+  if (!(fbSem >= 1 && fbSem <= 8)) fbSem = 0;
+  var all = [], seen = {};
+  st.forEach(function(s) {
+    (s.subjects || []).forEach(function(sub) {
+      var c = sub && sub.code;
+      if (c && !seen[c]) { seen[c] = 1; all.push(sub); }
+    });
+  });
+  /* Only Table-1 subjects of the semester we fetched — backlog subjects a
+     student is carrying (from VTU's separate backlog table) are left out. */
+  var codes = fbSem
+    ? all.filter(function(sub) { return subjectSemester(sub, fbSem) === fbSem; }).map(function(s) { return s.code; })
+    : all.map(function(s) { return s.code; });
+  if (!codes.length) codes = all.map(function(s) { return s.code; });   /* safety: never show an empty box */
+  if (!codes.length) {
+    row.innerHTML = '<span style="font-size:12px;color:#6b7280;">No subjects found for this batch.</span>';
+    return;
+  }
+  var existingCredits = b.credits || {};
+  row.innerHTML = "";
+  codes.forEach(function(code) {
+    var wrap = document.createElement("div");
+    wrap.style.cssText = "display:flex;align-items:center;gap:4px;";
+    var lbl = document.createElement("span");
+    lbl.textContent = code;
+    lbl.style.cssText = "font-size:13px;font-weight:600;font-family:monospace;white-space:nowrap;";
+    var inp = document.createElement("input");
+    inp.type = "number"; inp.min = "0"; inp.max = "10"; inp.step = "0.5";
+    inp.value = existingCredits[code] != null ? existingCredits[code] : "";
+    inp.className = "an-credit-input"; inp.dataset.code = code;
+    inp.style.cssText = "width:56px;padding:7px 6px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;text-align:center;background:#fff;outline:none;";
+    inp.addEventListener("focus", function() { inp.style.borderColor = "#059669"; });
+    inp.addEventListener("blur", function() { inp.style.borderColor = "#d1d5db"; });
+    wrap.appendChild(lbl);
+    wrap.appendChild(inp);
+    row.appendChild(wrap);
+  });
+}
+
 $("an_batch_sel").addEventListener("change", e => {
   if (!e.target.value) {
     $("an_content").style.display = "none";
@@ -1858,35 +2035,13 @@ $("an_batch_sel").addEventListener("change", e => {
   $("an_yearly_cgpa_result").style.display = "none";
   /* Populate credits inputs for this batch */
   var b = batches.find(x => x.id === currentBatch);
-  if (b && batchStudents[currentBatch]) {
-    var subjects = (batchStudents[currentBatch][0] || {}).subjects || [];
-    var existingCredits = (b.credits || {});
-    var row = $("an_credits_row");
-    row.innerHTML = "";
-    subjects.forEach(function(sub) {
-      var wrap = document.createElement("div");
-      wrap.style.cssText = "display:flex;align-items:center;gap:4px;";
-      var lbl = document.createElement("span");
-      lbl.textContent = sub.code;
-      lbl.style.cssText = "font-size:13px;font-weight:600;font-family:monospace;white-space:nowrap;";
-      var inp = document.createElement("input");
-      inp.type = "number"; inp.min = "0"; inp.max = "10"; inp.step = "0.5";
-      inp.value = existingCredits[sub.code] || "";
-      inp.className = "an-credit-input"; inp.dataset.code = sub.code;
-      inp.style.cssText = "width:56px;padding:7px 6px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;text-align:center;background:#fff;outline:none;";
-      inp.addEventListener("focus", function() { inp.style.borderColor = "#059669"; });
-      inp.addEventListener("blur", function() { inp.style.borderColor = "#d1d5db"; });
-      wrap.appendChild(lbl);
-      wrap.appendChild(inp);
-      row.appendChild(wrap);
-    });
-    /* Show existing SGPA/CGPA status */
-    var firstStudent = batchStudents[currentBatch][0];
-    if (firstStudent && firstStudent.sgpa != null) {
-      $("an_credits_status").textContent = "SGPA saved. Enter credits to compute Yearly CGPA.";
-    } else {
-      $("an_credits_status").textContent = "";
-    }
+  buildCreditsRow();
+  /* Show existing SGPA/CGPA status */
+  var st0 = batchStudents[currentBatch] && batchStudents[currentBatch][0];
+  if (st0 && st0.sgpa != null) {
+    $("an_credits_status").textContent = "SGPA saved. Enter credits to compute Yearly CGPA.";
+  } else {
+    $("an_credits_status").textContent = "";
   }
   if (batchStudents[currentBatch]) {
     if (b) renderAnalytics(b, batchStudents[currentBatch]);
@@ -1901,7 +2056,9 @@ $("an_credits_save_btn").addEventListener("click", function() {
   var creditsData = {};
   document.querySelectorAll(".an-credit-input").forEach(function(inp) {
     var v = parseFloat(inp.value);
-    if (!isNaN(v) && v > 0) creditsData[inp.dataset.code] = v;
+    /* >= 0 keeps explicitly-entered 0-credit courses (NSS / IKS / Yoga) in the
+       saved map — dropping them made them show up as "missing credits". */
+    if (!isNaN(v) && v >= 0) creditsData[inp.dataset.code] = v;
   });
   if (!Object.keys(creditsData).length) { toast("Enter at least one credit"); return; }
   this.disabled = true;
@@ -1909,12 +2066,147 @@ $("an_credits_save_btn").addEventListener("click", function() {
   socket.emit("save-credits", { batch_id: currentBatch, credits: creditsData });
 });
 
-/* Compute yearly CGPA */
-$("an_cgpa_calc_btn").addEventListener("click", function() {
+/* Compute yearly CGPA — the button only OPENS the SGPA input modal.
+   Calculation happens inside the modal on "Calculate CGPA". */
+const CGPA_SEM_LABELS = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"];
+
+function buildCgpaFields() {
+  const wrap = $("cgpa_sgpa_fields");
+  wrap.innerHTML = "";
+  CGPA_SEM_LABELS.forEach((lab, i) => {
+    const n = i + 1;
+    const d = document.createElement("div");
+    const l = document.createElement("label");
+    l.className = "lbl";
+    l.setAttribute("for", "cgpa_sem_" + n);
+    l.textContent = "Enter SGPA for " + lab + " Semester";
+    const inp = document.createElement("input");
+    inp.type = "text";
+    inp.inputMode = "decimal";
+    inp.id = "cgpa_sem_" + n;
+    inp.dataset.sem = n;
+    inp.placeholder = "e.g. 8.25";
+    inp.style.fontSize = "13px";
+    inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("cgpa_go_btn").click(); } });
+    d.appendChild(l); d.appendChild(inp);
+    wrap.appendChild(d);
+  });
+}
+buildCgpaFields();
+
+function cgpaErr(msg) {
+  const e = $("cgpa_error");
+  e.textContent = msg;
+  e.style.display = "block";
+  $("cgpa_result").style.display = "none";
+}
+
+$("an_cgpa_calc_btn").addEventListener("click", function () {
   if (!currentBatch) { toast("Select a batch first"); return; }
-  this.disabled = true;
-  this.textContent = "Computing...";
-  socket.emit("compute-yearly-cgpa", { batch_id: currentBatch });
+  $("cgpa_error").style.display = "none";
+  $("cgpa_result").style.display = "none";
+  $("cgpa_modal").classList.add("open");
+  const first = $("cgpa_sem_1");
+  if (first) setTimeout(() => first.focus(), 60);
+});
+
+$("cgpa_cancel_btn").addEventListener("click", () => $("cgpa_modal").classList.remove("open"));
+$("cgpa_modal").addEventListener("click", e => { if (e.target.id === "cgpa_modal") $("cgpa_modal").classList.remove("open"); });
+
+/* Per-semester valid credits, read from the DB (never hard-coded).
+   Matches saved batches of the same department + scheme + semester (any year),
+   newest save wins, sums credits > 0 (drops non-credit NSS / IKS / Yoga). */
+function semesterValidCredits(semN) {
+  const cur = batches.find(b => b.id === currentBatch);
+  if (!cur) return null;
+  const nrm = v => String(v == null ? "" : v).trim().toUpperCase();
+  const cands = batches.filter(b =>
+    String(b.semester) === String(semN) &&
+    nrm(b.department) === nrm(cur.department) &&
+    nrm(b.scheme) === nrm(cur.scheme) &&
+    b.credits && typeof b.credits === "object" && Object.keys(b.credits).length
+  );
+  if (!cands.length) return null;
+  cands.sort((a, b) => String(b.saved_at || "").localeCompare(String(a.saved_at || "")));
+  const credits = cands[0].credits || {};
+  let sum = 0;
+  Object.keys(credits).forEach(k => {
+    const v = parseFloat(credits[k]);
+    if (!isNaN(v) && v > 0) sum += v;
+  });
+  return sum > 0 ? Math.round(sum * 100) / 100 : null;
+}
+
+$("cgpa_go_btn").addEventListener("click", function () {
+  $("cgpa_error").style.display = "none";
+
+  /* --- validate entered SGPAs (empties ignored) --- */
+  const entries = [];
+  for (let n = 1; n <= 8; n++) {
+    const inp = $("cgpa_sem_" + n);
+    const raw = String(inp.value || "").trim();
+    if (!raw) continue;
+    if (!/^-?(\d+(\.\d+)?|\.\d+)$/.test(raw)) {
+      cgpaErr('"' + raw + '" is not valid for ' + CGPA_SEM_LABELS[n - 1] + ' Semester — enter a number such as 7.5 or 8.33.');
+      inp.focus(); return;
+    }
+    const v = parseFloat(raw);
+    if (isNaN(v)) { cgpaErr("Invalid SGPA for " + CGPA_SEM_LABELS[n - 1] + " Semester."); inp.focus(); return; }
+    if (v < 0) { cgpaErr("SGPA cannot be negative (" + CGPA_SEM_LABELS[n - 1] + " Semester = " + raw + ")."); inp.focus(); return; }
+    if (v > 10) { cgpaErr("SGPA cannot exceed 10.0 (" + CGPA_SEM_LABELS[n - 1] + " Semester = " + raw + ")."); inp.focus(); return; }
+    entries.push({ sem: n, sgpa: v });
+  }
+  if (!entries.length) { cgpaErr("Enter SGPA for at least one semester."); return; }
+
+  /* --- credit weights from DB --- */
+  const missing = [], used = [];
+  let num = 0, den = 0;
+  entries.forEach(e => {
+    const cr = semesterValidCredits(e.sem);
+    if (cr == null) { missing.push(e.sem); return; }
+    num += e.sgpa * cr;
+    den += cr;
+    used.push({ sem: e.sem, sgpa: e.sgpa, credits: cr });
+  });
+  if (missing.length) {
+    cgpaErr("Valid credits not found in the database for semester" + (missing.length > 1 ? "s " : " ") +
+      missing.join(", ") + " (" + missing.map(m => CGPA_SEM_LABELS[m - 1]).join(", ") +
+      "). Save credits for that semester's batch first — CGPA was not computed.");
+    return;
+  }
+
+  const cgpa = Math.round((num / den) * 100) / 100;
+  const cur = batches.find(b => b.id === currentBatch) || {};
+
+  let h = '<div style="background:linear-gradient(135deg,#1e40af,#1e3a8a);border-radius:12px;padding:16px 18px;color:#fff;">';
+  h += '<div style="font-size:12.5px;font-weight:700;opacity:.85;">Calculated CGPA</div>';
+  h += '<div style="font-size:32px;font-weight:800;line-height:1.15;margin:2px 0 8px;">' + cgpa.toFixed(2) + '</div>';
+  h += '<div style="font-size:12px;opacity:.9;">Semesters used: ' +
+       used.map(u => CGPA_SEM_LABELS[u.sem - 1] + " Sem (" + u.sgpa.toFixed(2) + ")").join(", ") + '</div>';
+  h += '<div style="font-size:11.5px;opacity:.75;margin-top:3px;">Σ(SGPA × valid credits) ÷ Σ(valid credits) = ' +
+       num.toFixed(2).replace(/\.00$/, ".00") + " ÷ " + den.toFixed(2) + '</div>';
+  h += '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;"><thead><tr>' +
+       '<th style="padding:4px 6px;text-align:left;opacity:.8;">Semester</th>' +
+       '<th style="padding:4px 6px;text-align:right;opacity:.8;">SGPA</th>' +
+       '<th style="padding:4px 6px;text-align:right;opacity:.8;">Valid credits</th>' +
+       '<th style="padding:4px 6px;text-align:right;opacity:.8;">Weight</th></tr></thead><tbody>';
+  used.forEach(u => {
+    h += '<tr style="border-top:1px solid rgba(255,255,255,.14);">' +
+         '<td style="padding:4px 6px;">' + CGPA_SEM_LABELS[u.sem - 1] + ' Semester</td>' +
+         '<td style="padding:4px 6px;text-align:right;font-family:monospace;">' + u.sgpa.toFixed(2) + '</td>' +
+         '<td style="padding:4px 6px;text-align:right;font-family:monospace;">' + u.credits.toFixed(1) + '</td>' +
+         '<td style="padding:4px 6px;text-align:right;font-family:monospace;">' +
+         (Math.round((u.credits / den) * 1000) / 10).toFixed(1) + '%</td></tr>';
+  });
+  h += '</tbody></table>';
+  h += '<div style="font-size:11px;opacity:.7;margin-top:8px;">Weights from saved batches (' +
+       esc(cur.department || "?") + " · scheme " + esc(cur.scheme || "?") +
+       '). Entered SGPA values were left unchanged.</div>';
+  h += '</div>';
+
+  $("cgpa_result").innerHTML = h;
+  $("cgpa_result").style.display = "block";
+  toast("CGPA calculated: " + cgpa.toFixed(2));
 });
 
 socket.on("yearly-cgpa-result", function(d) {
@@ -1978,6 +2270,7 @@ $("an_refresh_btn").addEventListener("click", () => {
 socket.on("batch-results", data => {
   if (data.error || !data.batch) { toast(data.error || "Batch not found"); return; }
   batchStudents[data.batch.id] = data.students;
+  if (currentBatch === data.batch.id) buildCreditsRow();   /* Fix A: fill boxes as soon as data lands */
   if (currentBatch === data.batch.id) renderAnalytics(data.batch, data.students);
   applyBrowseFilters();
   if (_openSubjCode && currentBatch === data.batch.id) { closeSubjectModal(); openSubjectModal(_openSubjCode); }
