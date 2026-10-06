@@ -65,6 +65,13 @@ def _attach_cgpa(students, batch):
         max_sem = None
     cgpa_map = db.compute_cgpa_map([s.get("usn", "") for s in students], max_sem)
     for s in students:
+        stored = s.get("cgpa")     # written by "Compute Yearly CGPA"; wins when present
+        if stored is not None:
+            try:
+                s["cgpa"] = round(float(stored), 2)
+                continue
+            except (TypeError, ValueError):
+                pass
         s["cgpa"] = cgpa_map.get(str(s.get("usn", "")).strip().upper())
     return students
 
@@ -851,7 +858,7 @@ def create_batch(data):
     if created:
         emit("log-message", {"data": f"[DB] Created new batch {label} ({batch_id}).\n"})
     else:
-        emit("log-message", {"data": f"[DB] Batch {label} already exists — selecting the existing one.\n"})
+        emit("log-message", {"data": f"[DB] Batch {label} already exists — using the existing row.\n"})
 
     # refresh every open tab first so the new batch is already in the tree
     # when batch-created runs client-side
@@ -969,63 +976,99 @@ def save_credits_handler(data):
         emit("credits-saved", {"ok": False, "error": err})
 
 
+def _fmt_sems(sems):
+    """[5, 6] -> 'Semesters 5 & 6'; [1..8] -> 'Semesters 1 to 8'."""
+    if not sems:
+        return ""
+    if len(sems) == 1:
+        return f"Semester {sems[0]}"
+    if sems == list(range(sems[0], sems[-1] + 1)) and len(sems) > 2:
+        return f"Semesters {sems[0]} to {sems[-1]}"
+    if len(sems) == 2:
+        return f"Semesters {sems[0]} & {sems[1]}"
+    return "Semesters " + ", ".join(str(s) for s in sems)
+
+
 @socketio.on("compute-yearly-cgpa")
 def compute_yearly_cgpa_handler(data):
-    batch_id = str(data.get("batch_id", ""))
-    if not batch_id or not db.is_connected():
-        emit("yearly-cgpa-result", {"ok": False, "error": "Not connected"})
-        return
+    """Compute Yearly CGPA for a batch over the SELECTED semesters.
+
+    CGPA = Σ(Course Credits × Grade Points for all courses EXCLUDING those with an
+    F grade) ÷ Σ(Course Credits for all courses EXCLUDING those with an F grade) —
+    only the courses of the chosen semesters take part.  A semester with no saved
+    result is skipped (never counted as 0, never an error)."""
+    data = data or {}
+    batch_id = str(data.get("batch_id", "") or "")
+    try:
+        sems = sorted({int(s) for s in (data.get("semesters") or [])})
+    except (TypeError, ValueError):
+        sems = []
+    sems = [s for s in sems if 1 <= s <= 8]
+
+    def fail(msg):
+        emit("yearly-cgpa-result", {"ok": False, "error": msg})
+
+    if not db.is_connected():
+        return fail(db.status_msg)
+    if not batch_id:
+        return fail("Select a batch first.")
+    if not sems:
+        return fail("Select at least one semester.")
     batch = db.fetch_batch(batch_id)
+    if not batch:                      # one retry: Supabase occasionally returns
+        batch = db.fetch_batch(batch_id)   # an empty result on the first call
     if not batch:
-        emit("yearly-cgpa-result", {"ok": False, "error": "Batch not found"})
-        return
-    sem = batch.get("semester")
-    scheme = batch.get("scheme", "")
-    if not sem:
-        emit("yearly-cgpa-result", {"ok": False, "error": "No semester info"})
-        return
-    # Pair semesters: 1-2, 3-4, 5-6
-    sem_num = int(sem) if str(sem).isdigit() else 0
-    if sem_num <= 0:
-        emit("yearly-cgpa-result", {"ok": False, "error": "Invalid semester"})
-        return
-    paired_sem = sem_num - 1 if sem_num % 2 == 0 else sem_num + 1
-    # Find paired batch
-    all_batches = db.fetch_batches()
-    paired_batch = None
-    for b in all_batches:
-        b_sem = int(b.get("semester", 0)) if str(b.get("semester", "")).isdigit() else 0
-        b_scheme = b.get("scheme", "")
-        if b_sem == paired_sem and b_scheme == scheme and b.get("id") != batch_id:
-            paired_batch = b
-            break
-    if not paired_batch:
-        emit("yearly-cgpa-result", {"ok": False, "error": f"Sem {paired_sem} batch not found. Need both semesters for yearly CGPA."})
-        return
-    # Get credits for both batches
-    credits1 = db.get_credits(batch_id)
-    credits2 = db.get_credits(paired_batch["id"])
-    if not credits1 or not credits2:
-        emit("yearly-cgpa-result", {"ok": False, "error": f"Missing credits for sem {sem} or sem {paired_sem}"})
-        return
-    # Fetch students from both
-    _, students1 = db.fetch_batch_with_students(batch_id)
-    _, students2 = db.fetch_batch_with_students(paired_batch["id"])
-    credits_map1 = {k: float(v) for k, v in credits1.items()}
-    credits_map2 = {k: float(v) for k, v in credits2.items()}
-    yearly = db.compute_yearly_cgpa(students1, students2, credits_map1, credits_map2)
-    # Cumulative CGPA up to the later of the two semesters (F excluded).
-    # student_results has no cgpa column, so nothing is written back to the DB.
-    max_sem = max(sem_num, paired_sem)
-    cgpa_map = db.compute_cgpa_map([e["usn"] for e in yearly], max_sem)
-    for entry in yearly:
-        cgpa = cgpa_map.get(entry["usn"])
-        if cgpa is not None:
-            entry["cgpa"] = cgpa
-    year_label = f"Year {(sem_num + 1) // 2}"
-    emit("yearly-cgpa-result", {"ok": True, "batch_id": batch_id,
-                                "year": year_label, "cgpa_data": yearly,
-                                "sem1": str(paired_sem), "sem2": str(sem)})
+        return fail("Batch not found")
+    students = db.fetch_students(batch_id)
+    if not students:
+        students = db.fetch_students(batch_id)   # retry: idle connections answer empty once
+    if not students:
+        return fail("This batch has no students yet.")
+
+    cgpa_map = db.compute_cgpa_for_semesters([s.get("usn", "") for s in students], sems)
+    if not cgpa_map:
+        cgpa_map = db.compute_cgpa_for_semesters([s.get("usn", "") for s in students], sems)
+
+    results, updates = [], []
+    for s in students:
+        usn = str(s.get("usn", "")).strip().upper()
+        got = cgpa_map.get(usn)
+        if not got:
+            continue                       # no valid course in the chosen semesters
+        cgpa, used = got
+        results.append({"usn": usn, "name": s.get("name", ""),
+                        "semesters": used, "cgpa": cgpa})
+        cur = s.get("cgpa")
+        try:
+            changed = cur is None or round(float(cur), 2) != cgpa
+        except (TypeError, ValueError):
+            changed = True
+        if changed and s.get("id"):
+            updates.append((s["id"], cgpa))
+
+    persisted = db.has_column("student_results", "cgpa")
+    saved, save_err = (db.save_cgpa(updates) if persisted else (0, None))
+
+    results.sort(key=lambda r: (-r["cgpa"], r["usn"]))
+    avg = round(sum(r["cgpa"] for r in results) / len(results), 2) if results else None
+    emit("yearly-cgpa-result", {
+        "ok": True, "batch_id": batch_id, "semesters": sems,
+        "semester_label": _fmt_sems(sems),
+        "batch_label": " · ".join(x for x in [
+            str(batch.get("department", "") or "").strip(),
+            str(batch.get("scheme", "") or "").strip(),
+            str(batch.get("year", "") or "").strip(),
+            "Sem " + str(batch.get("semester", "") or "?")] if x),
+        "processed": len(students),
+        "calculated": len(results),
+        "missing": len(students) - len(results),
+        "results": results,
+        "avg_cgpa": avg,
+        "persisted": persisted,
+        "saved": saved,
+        "saved_total": len(updates),
+        "save_error": save_err,
+    })
 
 
 @socketio.on("get-credits")

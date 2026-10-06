@@ -170,7 +170,11 @@ function render(data){
       if(gp>0){cgpa_num+=gp*cr;cgpa_den+=cr;}
     });
   });
-  const cgpa=cgpa_den>0?(cgpa_num/cgpa_den).toFixed(2):"—";
+  /* Saved CGPA (written by "Compute Yearly CGPA") wins; otherwise the same
+     formula applied to every semester of this record. */
+  const savedCgpa = (typeof data.cgpa === "number" && isFinite(data.cgpa)) ? data.cgpa : null;
+  const cgpa = savedCgpa != null ? savedCgpa.toFixed(2)
+             : (cgpa_den > 0 ? (cgpa_num / cgpa_den).toFixed(2) : "—");
 
   let h='';
 

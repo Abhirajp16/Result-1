@@ -411,6 +411,7 @@ def fetch_student_record(usn):
 
         # oldest batch first, so results from newer saves win on conflicts
         prepared = []
+        saved_cgpa = []          # (saved_at, cgpa) written by "Compute Yearly CGPA"
         for s in students:
             batch = fetch_batch(s.get("batch_id", ""))
             if not batch:
@@ -422,6 +423,11 @@ def fetch_student_record(usn):
                     cr = credits_map.get(subj.get("code", ""))
                     if cr is not None:
                         subj["credit"] = float(cr)
+            if s.get("cgpa") is not None:
+                try:
+                    saved_cgpa.append((batch.get("saved_at", "") or "", float(s["cgpa"])))
+                except (TypeError, ValueError):
+                    pass
             prepared.append((batch.get("saved_at", "") or "", {
                 "batch_id": s.get("batch_id", ""),
                 "batch_semester": str(batch.get("semester", "?")),
@@ -473,7 +479,13 @@ def fetch_student_record(usn):
                 "saved_at": meta.get("saved_at", ""),
             })
 
-        return {"usn": usn, "name": name, "semesters": semesters}
+        # Saved CGPA wins (newest calculation); otherwise apply the same formula
+        # across every semester of this record.
+        cgpa = sorted(saved_cgpa, key=lambda x: x[0])[-1][1] if saved_cgpa else None
+        if cgpa is None:
+            cgpa = compute_cgpa_map([usn]).get(usn)
+
+        return {"usn": usn, "name": name, "cgpa": cgpa, "semesters": semesters}
     except Exception as e:
         print(f"[Supabase] fetch_student_record error: {e}")
         return None
@@ -616,8 +628,9 @@ def compute_cgpa_map(usns, max_sem=None):
 
     out = {}
     for usn, items in entries.items():
-        # chronological so later saves overwrite older ones for the same subject
-        items.sort(key=lambda e: (e[0], e[1]))
+        # chronological by SAVE time so the newer save wins for a subject that
+        # appears in two rows (batch semester can be saved out of order)
+        items.sort(key=lambda e: (e[1], e[0]))
         latest = {}
         for _, _, credits_map, subjects in items:
             for subj in subjects:
@@ -645,6 +658,129 @@ def compute_cgpa_for_usn(usn, max_sem=None):
     if not usn:
         return None
     return compute_cgpa_map([usn], max_sem).get(str(usn).strip().upper())
+
+
+_COLUMN_CACHE = {}
+
+
+def has_column(table, column):
+    """True when `table` exposes `column` (cached per run).
+
+    PostgREST cannot run DDL, so optional columns such as student_results.cgpa
+    are detected at runtime instead of assumed."""
+    key = f"{table}.{column}"
+    if key not in _COLUMN_CACHE:
+        try:
+            client.table(table).select(column).limit(1).execute()
+            _COLUMN_CACHE[key] = True
+        except Exception:
+            _COLUMN_CACHE[key] = False
+    return _COLUMN_CACHE[key]
+
+
+def compute_cgpa_for_semesters(usns, semesters):
+    """CGPA = Σ(Course Credits × Grade Points for all courses EXCLUDING those with
+    an F grade) ÷ Σ(Course Credits for all courses EXCLUDING those with an F grade),
+    taking only the courses of `semesters` (e.g. 5 & 6 for a 3rd-year CGPA).
+
+    Courses are matched by their OWN semester (subject_semester, else the digit in
+    the code, else the batch semester) so a backlog paper counts where it belongs.
+    A subject with no saved credit — or 0 credits (NSS / IKS / Yoga) — adds nothing
+    to numerator or denominator.  Missing rows are skipped, never counted as 0.
+
+    Returns {usn: (cgpa, [semesters used])} for students with at least one course."""
+    try:
+        sel = {int(s) for s in (semesters or [])}
+    except (TypeError, ValueError):
+        sel = set()
+    sel = {s for s in sel if 1 <= s <= 8}
+    usns = [str(u).strip().upper() for u in (usns or []) if u and str(u).strip()]
+    usns = list(dict.fromkeys(usns))
+    if not is_connected() or not usns or not sel:
+        return {}
+
+    rows = []
+    try:
+        for i in range(0, len(usns), 200):
+            chunk = usns[i:i + 200]
+            got = client.table("student_results").select("batch_id,usn,subjects").in_("usn", chunk).execute().data or []
+            if not got:
+                # an idle / busy PostgREST connection occasionally answers empty —
+                # ask once more for this chunk instead of losing the whole batch
+                got = client.table("student_results").select("batch_id,usn,subjects").in_("usn", chunk).execute().data or []
+            rows += got
+    except Exception as e:
+        print(f"[Supabase] compute_cgpa_for_semesters error: {e}")
+        return {}
+
+    batch_cache = {}
+    entries = {}
+    for r in rows:
+        bid = r.get("batch_id", "")
+        batch = batch_cache.get(bid)
+        if batch is None:
+            batch = fetch_batch(bid) or fetch_batch(bid) or {}   # one retry: an empty
+            batch_cache[bid] = batch                             # answer would drop every
+        if not batch:                                            # course of this batch
+            continue
+        fallback = _to_semester(batch.get("semester"))
+        for subj in (_load_json(r.get("subjects"), []) or []):
+            code = subj.get("code", "")
+            if not code:
+                continue
+            sem = _subject_semester(subj, fallback)
+            if sem not in sel:
+                continue
+            entries.setdefault(str(r.get("usn", "")).strip().upper(), []).append(
+                (sem, batch.get("saved_at", "") or "", code, subj, batch.get("credits") or {})
+            )
+
+    out = {}
+    for usn, items in entries.items():
+        # chronological by SAVE time so the newest save wins for a subject that
+        # appears in two rows (batch semesters are not always saved in order)
+        items.sort(key=lambda e: (e[1], e[0]))
+        latest = {}
+        for sem, _saved, code, subj, credits_map in items:
+            latest[code] = (sem, subj, credits_map)
+
+        pass_credits = 0.0
+        pass_points = 0.0
+        used = set()
+        for code, (sem, subj, credits_map) in latest.items():
+            cr = _subject_credit(code, credits_map)
+            if cr is None or cr <= 0:
+                continue
+            grade = _subject_grade(subj)
+            if grade == "F":
+                continue
+            pass_credits += cr
+            pass_points += GRADE_POINTS.get(grade, 0) * cr
+            used.add(sem)
+        if pass_credits > 0:
+            out[usn] = (round(pass_points / pass_credits, 2), sorted(used))
+    return out
+
+
+def save_cgpa(updates):
+    """Write computed CGPA back to student_results.
+
+    updates: [(row_id, cgpa)]  ->  returns (saved_count, error).
+    No-op when the optional `cgpa` column is not present in the table."""
+    if not updates:
+        return 0, None
+    if not has_column("student_results", "cgpa"):
+        return 0, None
+    if not is_connected():
+        return 0, "Supabase not connected"
+    saved = 0
+    for row_id, cgpa in updates:
+        try:
+            client.table("student_results").update({"cgpa": cgpa}).eq("id", row_id).execute()
+            saved += 1
+        except Exception as e:
+            return saved, str(e)
+    return saved, None
 
 
 def compute_yearly_cgpa(students_sem1, students_sem2, credits_map_sem1, credits_map_sem2):

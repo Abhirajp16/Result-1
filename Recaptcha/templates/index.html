@@ -344,6 +344,33 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .rank-card .rk { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
 .rank-card .rv { font-size: 26px; font-weight: 800; margin: 7px 0 2px; letter-spacing: -.02em; background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .rank-card .ru { font-family: ui-monospace, "Cascadia Code", Consolas, Menlo, monospace; font-size: 13px; color: var(--ink-soft); }
+
+/* Student Performance Ranking — SGPA / CGPA selector */
+.rk-sel { position: relative; display: inline-block; }
+.rk-sel-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: #fff; border: 1px solid #D1D5DB; border-radius: 8px;
+  padding: 4px 11px; font-size: 11px; font-weight: 700; color: #374151;
+  cursor: pointer; transition: background .15s, border-color .15s;
+}
+.rk-sel-btn:hover { background: #F3F4F6; border-color: #9CA3AF; }
+.rk-sel-caret { font-size: 8px; color: #6B7280; transition: transform .18s ease; }
+.rk-sel.open .rk-sel-caret { transform: rotate(180deg); }
+.rk-sel-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 95;
+  min-width: 172px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 10px; box-shadow: 0 12px 34px rgba(0,0,0,.14);
+  padding: 5px; display: none;
+}
+.rk-sel.open .rk-sel-menu { display: block; animation: fadeUp .15s ease; }
+.rk-sel-row {
+  display: flex; align-items: center; gap: 7px;
+  padding: 8px 10px; border-radius: 7px;
+  font-size: 12.5px; font-weight: 600; color: #374151; cursor: pointer;
+  white-space: nowrap;
+}
+.rk-sel-row .tick { width: 12px; flex: 0 0 12px; font-weight: 800; color: #059669; }
+.rk-sel-row:hover { background: var(--accent-soft); color: var(--pine); }
 .rank-card.hero {
   background: linear-gradient(135deg, #1C7A5E 0%, #123D2E 100%);
   border-color: transparent; box-shadow: var(--shadow);
@@ -501,6 +528,25 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   .sr-subj-table tr:nth-child(even) { background: #F9FAFB; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .panel { box-shadow: none; border: 1px solid #E5E7EB; break-inside: avoid; }
   .sr-sem-card { break-inside: avoid; }
+}
+
+/* ---------- CGPA results → Print / Save as PDF ---------- */
+#print_cgpa { display: none; }
+@media print {
+  @page { margin: 14mm; }
+  body.printing-cgpa > * { display: none !important; }
+  body.printing-cgpa > #print_cgpa { display: block !important; }
+  body.printing-cgpa > #print_cgpa, body.printing-cgpa > #print_cgpa * { visibility: visible !important; }
+  #print_cgpa { color: #000; font-family: Arial, Helvetica, sans-serif; }
+  #print_cgpa .pc-title { font-size: 16pt; font-weight: 800; }
+  #print_cgpa .pc-sub { font-size: 10.5pt; margin-top: 3px; }
+  #print_cgpa .pc-sum { font-size: 11pt; margin-top: 10px; }
+  #print_cgpa table { width: 100%; border-collapse: collapse; font-size: 10.5pt; margin-top: 10px; }
+  #print_cgpa th, #print_cgpa td { border: 1px solid #444; padding: 4px 7px; }
+  #print_cgpa th { background: #eee; text-align: left; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #print_cgpa thead { display: table-header-group; }
+  #print_cgpa tr { page-break-inside: avoid; }
+  #print_cgpa .pc-foot { margin-top: 10px; font-size: 9.5pt; color: #333; }
 }
 </style>
 </head>
@@ -710,7 +756,19 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
     <div class="grid-2">
       <div class="panel"><h3>Subject-wise average (total marks)</h3><div class="chart-box"><canvas id="chart_subj"></canvas></div></div>
       <div class="panel">
-        <h3 style="display:flex;align-items:center;justify-content:space-between;">Student SGPA Rankings <button onclick="openSgpaModal()" style="background:none;border:1px solid #D1D5DB;border-radius:8px;padding:4px 12px;font-size:11px;font-weight:700;color:#6B7280;cursor:pointer;transition:background .15s;" onmouseover="this.style.background='#F3F4F6'" onmouseout="this.style.background='none'">See More</button></h3>
+        <h3 style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <span>Student Performance Ranking</span>
+          <span style="display:flex;align-items:center;gap:8px;flex:0 0 auto;">
+            <div class="rk-sel" id="an_rank_sel">
+              <button type="button" class="rk-sel-btn" id="an_rank_btn"><span id="an_rank_lbl">SGPA Ranking</span><span class="rk-sel-caret">▼</span></button>
+              <div class="rk-sel-menu" id="an_rank_menu">
+                <div class="rk-sel-row" data-mode="sgpa"><span class="tick">✓</span>SGPA Ranking</div>
+                <div class="rk-sel-row" data-mode="cgpa"><span class="tick"></span>CGPA Ranking</div>
+              </div>
+            </div>
+            <button onclick="openSgpaModal()" style="background:none;border:1px solid #D1D5DB;border-radius:8px;padding:4px 12px;font-size:11px;font-weight:700;color:#6B7280;cursor:pointer;transition:background .15s;" onmouseover="this.style.background='#F3F4F6'" onmouseout="this.style.background='none'">See More</button>
+          </span>
+        </h3>
         <div id="an_sgpa_rankings"></div>
       </div>
     </div>
@@ -837,12 +895,28 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
   </div>
 </div>
 
-<!-- ============ Compute Yearly CGPA — SGPA input modal ============ -->
+<!-- ============ Compute Yearly CGPA — batch + semester selector ============ -->
 <div class="modal-overlay" id="cgpa_modal">
-  <div class="modal" style="width:520px;max-height:88vh;overflow-y:auto;">
+  <div class="modal" style="width:640px;max-height:88vh;overflow-y:auto;">
     <h3 style="margin:0 0 4px;">Compute Yearly CGPA</h3>
-    <p style="color:var(--muted);font-size:13px;margin:0 0 16px;">Enter the SGPA you scored in each completed semester. Leave the rest empty — only the semesters you fill in are used. CGPA is credit-weighted (F-grade courses excluded), not a simple average.</p>
-    <div id="cgpa_sgpa_fields" style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-bottom:14px;"></div>
+    <p style="color:var(--muted);font-size:13px;margin:0 0 14px;">Pick a batch and the semesters to include — e.g. <b>Select all</b> for the full CGPA, or <b>Manual select</b> 5 &amp; 6 for the 3rd-year CGPA.
+      CGPA = Σ(Course Credits × Grade Points) ÷ Σ(Course Credits) over all courses of the chosen semesters <b>excluding F grades</b>. A semester with no saved result is skipped, never counted as 0.</p>
+
+    <label class="lbl" for="cgpa_batch_sel">Batch</label>
+    <select id="cgpa_batch_sel" style="width:100%;margin-bottom:14px;"></select>
+
+    <div class="lbl" style="margin-bottom:6px;">Semesters</div>
+    <div style="display:flex;gap:18px;align-items:center;margin-bottom:10px;">
+      <label style="display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer;">
+        <input type="radio" name="cgpa_sem_mode" id="cgpa_mode_all" checked> Select all
+      </label>
+      <label style="display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer;">
+        <input type="radio" name="cgpa_sem_mode" id="cgpa_mode_manual"> Manual select
+      </label>
+      <span id="cgpa_sem_hint" style="color:var(--muted);font-size:12px;"></span>
+    </div>
+    <div id="cgpa_sem_boxes" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;"></div>
+
     <div id="cgpa_error" style="display:none;color:#ef4444;font-size:12.5px;font-weight:600;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:8px 10px;margin-bottom:12px;"></div>
     <div id="cgpa_result" style="display:none;margin-bottom:16px;"></div>
     <div class="row">
@@ -851,6 +925,8 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
     </div>
   </div>
 </div>
+
+<div id="print_cgpa"></div>
 
 <div id="toast"></div>
 
@@ -1799,6 +1875,7 @@ socket.on("batches", data => {
 
   const sel = $("an_batch_sel");
   fillHierSelect(sel, "— select a saved batch —");   // hierarchy tree, keeps current selection
+  fillHierSelect($("cgpa_batch_sel"), "— select batch —");   /* Compute Yearly CGPA modal */
   $("an_empty").style.display = batches.length ? "none" : "block";
   if (window._pendingBatchId) {
     var pb = window._pendingBatchId;
@@ -2066,179 +2143,219 @@ $("an_credits_save_btn").addEventListener("click", function() {
   socket.emit("save-credits", { batch_id: currentBatch, credits: creditsData });
 });
 
-/* Compute yearly CGPA — the button only OPENS the SGPA input modal.
-   Calculation happens inside the modal on "Calculate CGPA". */
+/* Compute yearly CGPA — the button opens the batch + semester selector.
+   CGPA itself is computed on the server from saved results. */
 const CGPA_SEM_LABELS = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"];
 
-function buildCgpaFields() {
-  const wrap = $("cgpa_sgpa_fields");
+function buildCgpaSemBoxes() {
+  const wrap = $("cgpa_sem_boxes");
   wrap.innerHTML = "";
   CGPA_SEM_LABELS.forEach((lab, i) => {
     const n = i + 1;
-    const d = document.createElement("div");
-    const l = document.createElement("label");
-    l.className = "lbl";
-    l.setAttribute("for", "cgpa_sem_" + n);
-    l.textContent = "Enter SGPA for " + lab + " Semester";
-    const inp = document.createElement("input");
-    inp.type = "text";
-    inp.inputMode = "decimal";
-    inp.id = "cgpa_sem_" + n;
-    inp.dataset.sem = n;
-    inp.placeholder = "e.g. 8.25";
-    inp.style.fontSize = "13px";
-    inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("cgpa_go_btn").click(); } });
-    d.appendChild(l); d.appendChild(inp);
-    wrap.appendChild(d);
+    const box = document.createElement("label");
+    box.style.cssText = "display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = true;
+    cb.dataset.sem = n;
+    cb.id = "cgpa_chk_" + n;
+    box.appendChild(cb);
+    const t = document.createElement("span");
+    t.textContent = lab;
+    box.appendChild(t);
+    wrap.appendChild(box);
   });
 }
-buildCgpaFields();
+buildCgpaSemBoxes();
+
+function cgpaManualMode() { return $("cgpa_mode_manual").checked; }
+
+function cgpaSelectedSems() {
+  if (!cgpaManualMode()) return CGPA_SEM_LABELS.map((_, i) => i + 1);   /* Select all = 1..8 */
+  const out = [];
+  CGPA_SEM_LABELS.forEach((_, i) => { const cb = $("cgpa_chk_" + (i + 1)); if (cb && cb.checked) out.push(i + 1); });
+  return out;
+}
+
+function cgpaSyncSemUI() {
+  const manual = cgpaManualMode();
+  CGPA_SEM_LABELS.forEach((_, i) => { $("cgpa_chk_" + (i + 1)).disabled = !manual; });
+  const n = cgpaSelectedSems().length;
+  $("cgpa_sem_hint").textContent = manual
+    ? (n ? n + " selected" : "tick at least one")
+    : "all 8 semesters";
+}
 
 function cgpaErr(msg) {
   const e = $("cgpa_error");
   e.textContent = msg;
   e.style.display = "block";
   $("cgpa_result").style.display = "none";
+  $("cgpa_go_btn").disabled = false;
+  $("cgpa_go_btn").textContent = "Calculate CGPA";
 }
 
 $("an_cgpa_calc_btn").addEventListener("click", function () {
-  if (!currentBatch) { toast("Select a batch first"); return; }
   $("cgpa_error").style.display = "none";
   $("cgpa_result").style.display = "none";
+  $("cgpa_go_btn").disabled = false;
+  $("cgpa_go_btn").textContent = "Calculate CGPA";
+
+  if (!batches.length) loadBatches();                       /* batches load lazily */
+  fillHierSelect($("cgpa_batch_sel"), "— select batch —");
+  $("cgpa_batch_sel").value = currentBatch || "";           /* prefill analytics selection */
+  syncHierLabel($("cgpa_batch_sel"));
+
+  $("cgpa_mode_all").checked = true;
+  $("cgpa_mode_manual").checked = false;
+  CGPA_SEM_LABELS.forEach((_, i) => { $("cgpa_chk_" + (i + 1)).checked = true; });
+  cgpaSyncSemUI();
+
   $("cgpa_modal").classList.add("open");
-  const first = $("cgpa_sem_1");
-  if (first) setTimeout(() => first.focus(), 60);
+  setTimeout(() => { const hb = document.querySelector("#cgpa_modal .hsel-btn"); if (hb) hb.focus(); }, 60);
+});
+
+["cgpa_mode_all", "cgpa_mode_manual"].forEach(id =>
+  $(id).addEventListener("change", () => {
+    /* "Select all" ticks all 8; switching to "Manual select" starts EMPTY so only
+       the semesters you actually tick take part — nothing to un-tick first. */
+    const manual = cgpaManualMode();
+    CGPA_SEM_LABELS.forEach((_, i) => { $("cgpa_chk_" + (i + 1)).checked = !manual; });
+    cgpaSyncSemUI();
+  }));
+CGPA_SEM_LABELS.forEach((_, i) =>
+  $("cgpa_chk_" + (i + 1)).addEventListener("change", cgpaSyncSemUI));
+
+$("cgpa_go_btn").addEventListener("click", function () {
+  $("cgpa_error").style.display = "none";
+  const batch_id = $("cgpa_batch_sel").value;
+  const sems = cgpaSelectedSems();
+  if (!batch_id) { cgpaErr("Select a batch first."); return; }
+  if (!sems.length) { cgpaErr("Select at least one semester."); return; }
+  this.disabled = true;
+  this.textContent = "Calculating…";
+  socket.emit("compute-yearly-cgpa", { batch_id: batch_id, semesters: sems });
 });
 
 $("cgpa_cancel_btn").addEventListener("click", () => $("cgpa_modal").classList.remove("open"));
 $("cgpa_modal").addEventListener("click", e => { if (e.target.id === "cgpa_modal") $("cgpa_modal").classList.remove("open"); });
 
-/* Per-semester valid credits, read from the DB (never hard-coded).
-   Matches saved batches of the same department + scheme + semester (any year),
-   newest save wins, sums credits > 0 (drops non-credit NSS / IKS / Yoga). */
-function semesterValidCredits(semN) {
-  const cur = batches.find(b => b.id === currentBatch);
-  if (!cur) return null;
-  const nrm = v => String(v == null ? "" : v).trim().toUpperCase();
-  const cands = batches.filter(b =>
-    String(b.semester) === String(semN) &&
-    nrm(b.department) === nrm(cur.department) &&
-    nrm(b.scheme) === nrm(cur.scheme) &&
-    b.credits && typeof b.credits === "object" && Object.keys(b.credits).length
-  );
-  if (!cands.length) return null;
-  cands.sort((a, b) => String(b.saved_at || "").localeCompare(String(a.saved_at || "")));
-  const credits = cands[0].credits || {};
-  let sum = 0;
-  Object.keys(credits).forEach(k => {
-    const v = parseFloat(credits[k]);
-    if (!isNaN(v) && v > 0) sum += v;
+socket.on("yearly-cgpa-result", function(d) {
+  const go = $("cgpa_go_btn");
+  go.disabled = false;
+  go.textContent = "Calculate CGPA";
+  if (!d.ok) { cgpaErr(d.error || "Failed to compute CGPA."); return; }
+
+  lastCgpaResult = d;                 /* kept for Print / Save as PDF */
+  const rows = d.results || [];
+
+  /* --- summary --- */
+  let h = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">';
+  [["Students Processed", d.processed], ["Successfully Calculated", d.calculated],
+   ["No Valid SGPA", d.missing]].forEach(c => {
+    h += '<div style="background:linear-gradient(135deg,#1e40af,#1e3a8a);border-radius:10px;padding:10px 12px;color:#fff;">' +
+         '<div style="font-size:11px;opacity:.85;">' + c[0] + '</div>' +
+         '<div style="font-size:22px;font-weight:800;line-height:1.2;">' + (c[1] == null ? 0 : c[1]) + '</div></div>';
   });
-  return sum > 0 ? Math.round(sum * 100) / 100 : null;
-}
-
-$("cgpa_go_btn").addEventListener("click", function () {
-  $("cgpa_error").style.display = "none";
-
-  /* --- validate entered SGPAs (empties ignored) --- */
-  const entries = [];
-  for (let n = 1; n <= 8; n++) {
-    const inp = $("cgpa_sem_" + n);
-    const raw = String(inp.value || "").trim();
-    if (!raw) continue;
-    if (!/^-?(\d+(\.\d+)?|\.\d+)$/.test(raw)) {
-      cgpaErr('"' + raw + '" is not valid for ' + CGPA_SEM_LABELS[n - 1] + ' Semester — enter a number such as 7.5 or 8.33.');
-      inp.focus(); return;
-    }
-    const v = parseFloat(raw);
-    if (isNaN(v)) { cgpaErr("Invalid SGPA for " + CGPA_SEM_LABELS[n - 1] + " Semester."); inp.focus(); return; }
-    if (v < 0) { cgpaErr("SGPA cannot be negative (" + CGPA_SEM_LABELS[n - 1] + " Semester = " + raw + ")."); inp.focus(); return; }
-    if (v > 10) { cgpaErr("SGPA cannot exceed 10.0 (" + CGPA_SEM_LABELS[n - 1] + " Semester = " + raw + ")."); inp.focus(); return; }
-    entries.push({ sem: n, sgpa: v });
-  }
-  if (!entries.length) { cgpaErr("Enter SGPA for at least one semester."); return; }
-
-  /* --- credit weights from DB --- */
-  const missing = [], used = [];
-  let num = 0, den = 0;
-  entries.forEach(e => {
-    const cr = semesterValidCredits(e.sem);
-    if (cr == null) { missing.push(e.sem); return; }
-    num += e.sgpa * cr;
-    den += cr;
-    used.push({ sem: e.sem, sgpa: e.sgpa, credits: cr });
-  });
-  if (missing.length) {
-    cgpaErr("Valid credits not found in the database for semester" + (missing.length > 1 ? "s " : " ") +
-      missing.join(", ") + " (" + missing.map(m => CGPA_SEM_LABELS[m - 1]).join(", ") +
-      "). Save credits for that semester's batch first — CGPA was not computed.");
-    return;
-  }
-
-  const cgpa = Math.round((num / den) * 100) / 100;
-  const cur = batches.find(b => b.id === currentBatch) || {};
-
-  let h = '<div style="background:linear-gradient(135deg,#1e40af,#1e3a8a);border-radius:12px;padding:16px 18px;color:#fff;">';
-  h += '<div style="font-size:12.5px;font-weight:700;opacity:.85;">Calculated CGPA</div>';
-  h += '<div style="font-size:32px;font-weight:800;line-height:1.15;margin:2px 0 8px;">' + cgpa.toFixed(2) + '</div>';
-  h += '<div style="font-size:12px;opacity:.9;">Semesters used: ' +
-       used.map(u => CGPA_SEM_LABELS[u.sem - 1] + " Sem (" + u.sgpa.toFixed(2) + ")").join(", ") + '</div>';
-  h += '<div style="font-size:11.5px;opacity:.75;margin-top:3px;">Σ(SGPA × valid credits) ÷ Σ(valid credits) = ' +
-       num.toFixed(2).replace(/\.00$/, ".00") + " ÷ " + den.toFixed(2) + '</div>';
-  h += '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;"><thead><tr>' +
-       '<th style="padding:4px 6px;text-align:left;opacity:.8;">Semester</th>' +
-       '<th style="padding:4px 6px;text-align:right;opacity:.8;">SGPA</th>' +
-       '<th style="padding:4px 6px;text-align:right;opacity:.8;">Valid credits</th>' +
-       '<th style="padding:4px 6px;text-align:right;opacity:.8;">Weight</th></tr></thead><tbody>';
-  used.forEach(u => {
-    h += '<tr style="border-top:1px solid rgba(255,255,255,.14);">' +
-         '<td style="padding:4px 6px;">' + CGPA_SEM_LABELS[u.sem - 1] + ' Semester</td>' +
-         '<td style="padding:4px 6px;text-align:right;font-family:monospace;">' + u.sgpa.toFixed(2) + '</td>' +
-         '<td style="padding:4px 6px;text-align:right;font-family:monospace;">' + u.credits.toFixed(1) + '</td>' +
-         '<td style="padding:4px 6px;text-align:right;font-family:monospace;">' +
-         (Math.round((u.credits / den) * 1000) / 10).toFixed(1) + '%</td></tr>';
-  });
-  h += '</tbody></table>';
-  h += '<div style="font-size:11px;opacity:.7;margin-top:8px;">Weights from saved batches (' +
-       esc(cur.department || "?") + " · scheme " + esc(cur.scheme || "?") +
-       '). Entered SGPA values were left unchanged.</div>';
   h += '</div>';
+  h += '<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px;"><b style="color:var(--ink);">' +
+       esc(d.batch_label || "") + '</b> · ' + esc(d.semester_label || "") +
+       (d.avg_cgpa != null ? ' · average CGPA <b style="color:var(--ink);">' + Number(d.avg_cgpa).toFixed(2) + '</b>' : '') + '</div>';
+
+  /* --- results table --- */
+  h += '<div style="max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:10px;">' +
+       '<table style="width:100%;border-collapse:collapse;font-size:12.5px;">' +
+       '<thead><tr>' +
+       '<th style="padding:7px 9px;text-align:left;position:sticky;top:0;background:var(--card);z-index:1;">USN</th>' +
+       '<th style="padding:7px 9px;text-align:left;position:sticky;top:0;background:var(--card);z-index:1;">Name</th>' +
+       '<th style="padding:7px 9px;text-align:center;position:sticky;top:0;background:var(--card);z-index:1;">Semesters Used</th>' +
+       '<th style="padding:7px 9px;text-align:right;position:sticky;top:0;background:var(--card);z-index:1;">CGPA</th>' +
+       '</tr></thead><tbody>';
+  rows.forEach(r => {
+    h += '<tr style="border-top:1px solid var(--line);">' +
+         '<td style="padding:6px 9px;font-family:monospace;font-weight:600;">' + esc(r.usn) + '</td>' +
+         '<td style="padding:6px 9px;">' + esc(r.name || "") + '</td>' +
+         '<td style="padding:6px 9px;text-align:center;">' + (r.semesters || []).join(", ") + '</td>' +
+         '<td style="padding:6px 9px;text-align:right;font-weight:800;">' + Number(r.cgpa).toFixed(2) + '</td></tr>';
+  });
+  if (!rows.length) {
+    h += '<tr><td colspan="4" style="padding:16px;text-align:center;color:var(--muted);">' +
+         'No student has a valid course in the selected semesters.</td></tr>';
+  }
+  h += '</tbody></table></div>';
+
+  /* --- saved note (only when the value really was written) --- */
+  if (d.persisted && d.saved) {
+    h += '<div style="font-size:11.5px;color:#059669;margin-top:8px;">✓ Saved for ' + (d.saved || 0) +
+         ' student' + ((d.saved || 0) === 1 ? '' : 's') +
+         ' — the CGPA ranking in Analytics and the Student Record now show this value.</div>';
+  }
+  if (d.save_error) h += '<div style="font-size:11.5px;color:#ef4444;margin-top:4px;">Save error: ' + esc(d.save_error) + '</div>';
+
+  /* --- print / save as PDF --- */
+  h += '<div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
+       '<button type="button" class="btn ghost" onclick="printCgpaResult()">🖨 Print / Save as PDF</button>' +
+       '<span style="font-size:11.5px;color:var(--muted);">In the print window choose destination <b>Save as PDF</b>.</span>' +
+       '</div>';
 
   $("cgpa_result").innerHTML = h;
   $("cgpa_result").style.display = "block";
-  toast("CGPA calculated: " + cgpa.toFixed(2));
-});
-
-socket.on("yearly-cgpa-result", function(d) {
-  $("an_cgpa_calc_btn").disabled = false;
-  $("an_cgpa_calc_btn").textContent = "Compute Yearly CGPA";
-  if (d.ok) {
-    var h = '<div style="background:linear-gradient(135deg,#1e40af,#1e3a8a);border-radius:12px;padding:16px 20px;color:#fff;">';
-    h += '<div style="font-size:14px;font-weight:800;margin-bottom:10px;">' + d.year + ' CGPA (' + d.sem1 + '+' + d.sem2 + ')</div>';
-    h += '<table style="width:100%;border-collapse:collapse;font-size:12px;color:#fff;"><thead><tr>';
-    h += '<th style="padding:5px 8px;text-align:left;opacity:.8;">USN</th>';
-    h += '<th style="padding:5px 8px;text-align:left;opacity:.8;">Name</th>';
-    h += '<th style="padding:5px 8px;text-align:center;opacity:.8;">CGPA</th>';
-    h += '</tr></thead><tbody>';
-    (d.cgpa_data || []).forEach(function(row) {
-      h += '<tr style="background:rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.1);">';
-      h += '<td style="padding:5px 8px;font-family:monospace;font-weight:600;">' + esc(row.usn) + '</td>';
-      h += '<td style="padding:5px 8px;">' + esc(row.name) + '</td>';
-      h += '<td style="padding:5px 8px;text-align:center;font-weight:800;">' + (row.cgpa != null ? row.cgpa.toFixed(2) : "—") + '</td>';
-      h += '</tr>';
-    });
-    h += '</tbody></table></div>';
+  if (d.batch_id === currentBatch) {          /* panel only mirrors the batch on screen */
     $("an_yearly_cgpa_result").innerHTML = h;
     $("an_yearly_cgpa_result").style.display = "block";
-    /* Refresh batch data to show updated CGPA */
-    delete batchStudents[currentBatch];
-    socket.emit("get-batch-results", { batch_id: currentBatch });
-    toast(d.year + " CGPA computed!");
-  } else {
-    toast(d.error || "Failed");
-    $("an_credits_status").textContent = d.error || "";
   }
+
+  /* refresh Analytics so the CGPA ranking / averages use the new values */
+  if (d.batch_id) {
+    delete batchStudents[d.batch_id];
+    socket.emit("get-batch-results", { batch_id: d.batch_id });
+  }
+  toast("CGPA computed for " + (d.calculated || 0) + " student" + ((d.calculated || 0) === 1 ? "" : "s"));
 });
+
+/* ---------------- CGPA results → Print / Save as PDF ---------------- */
+let lastCgpaResult = null;
+
+function printCgpaResult() {
+  const d = lastCgpaResult;
+  if (!d || !d.ok) { toast("Calculate CGPA first"); return; }
+  const rows = d.results || [];
+  const now = new Date();
+
+  let h = '<div class="pc-title">Student CGPA</div>';
+  h += '<div class="pc-sub">' + esc(d.batch_label || "") + ' &middot; ' + esc(d.semester_label || "") + '</div>';
+  h += '<div class="pc-sum">Students Processed: <b>' + (d.processed || 0) + '</b> &nbsp;|&nbsp; ' +
+       'Successfully Calculated: <b>' + (d.calculated || 0) + '</b> &nbsp;|&nbsp; ' +
+       'No Valid SGPA: <b>' + (d.missing || 0) + '</b>' +
+       (d.avg_cgpa != null ? ' &nbsp;|&nbsp; Average CGPA: <b>' + Number(d.avg_cgpa).toFixed(2) + '</b>' : '') +
+       '</div>';
+  h += '<div class="pc-sub">Printed on ' + now.toLocaleString() + '</div>';
+
+  h += '<table><thead><tr>' +
+       '<th style="width:40px;">S.No</th><th>USN</th><th>Name</th>' +
+       '<th style="text-align:center;">Semesters Used</th><th style="text-align:right;">CGPA</th>' +
+       '</tr></thead><tbody>';
+  rows.forEach((r, i) => {
+    h += '<tr><td style="text-align:center;">' + (i + 1) + '</td>' +
+         '<td>' + esc(r.usn) + '</td>' +
+         '<td>' + esc(r.name || "") + '</td>' +
+         '<td style="text-align:center;">' + (r.semesters || []).join(", ") + '</td>' +
+         '<td style="text-align:right;font-weight:700;">' + Number(r.cgpa).toFixed(2) + '</td></tr>';
+  });
+  if (!rows.length) {
+    h += '<tr><td colspan="5" style="text-align:center;padding:10px;">' +
+         'No student has a valid course in the selected semesters.</td></tr>';
+  }
+  h += '</tbody></table>';
+  h += '<div class="pc-foot">CGPA = &Sigma; (Course Credits &times; Grade Points for all courses excluding F) ' +
+       '&divide; &Sigma; (Course Credits for all courses excluding F) &mdash; generated by VTU Result Fetcher.</div>';
+
+  $("print_cgpa").innerHTML = h;
+  document.body.classList.add("printing-cgpa");
+  window.print();
+}
+
+window.addEventListener("afterprint", () => document.body.classList.remove("printing-cgpa"));
 
 $("an_delete_btn").addEventListener("click", () => {
   if (!currentBatch) return;
@@ -2410,38 +2527,10 @@ function renderAnalytics(batch, students) {
   chartCanvas.style.cursor = "pointer";
   chartCanvas.title = "Click a bar to view subject details";
 
-  /* ---- Student SGPA Rankings ---- */
+  /* ---- Student Performance Ranking (SGPA / CGPA selector) ---- */
   sgpaModalData = sgSorted;
-  const sgpaRankEl = $("an_sgpa_rankings");
-  if (sgSorted.length) {
-    let rankH = '<div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;max-height:320px;overflow-y:auto;">';
-    rankH += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
-    rankH += '<thead style="position:sticky;top:0;z-index:1;"><tr style="background:linear-gradient(135deg,#10B981 0%,#059669 100%);">';
-    rankH += '<th style="padding:8px 10px;text-align:center;font-weight:700;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.05em;width:40px;">Rank</th>';
-    rankH += '<th style="padding:8px 10px;text-align:left;font-weight:700;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">USN</th>';
-    rankH += '<th style="padding:8px 10px;text-align:left;font-weight:700;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Name</th>';
-    rankH += '<th style="padding:8px 10px;text-align:center;font-weight:700;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.05em;width:60px;">SGPA</th>';
-    rankH += '</tr></thead><tbody>';
-    sgSorted.forEach((entry, idx) => {
-      const sg = entry.sg;
-      const s = entry.s;
-      const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : (idx + 1);
-      let rowBg = idx % 2 === 0 ? "#fff" : "#F9FAFB";
-      if (idx === 0) rowBg = "#FFFBEB";
-      else if (idx === 1) rowBg = "#F9FAFB";
-      else if (idx === 2) rowBg = "#FEF3C7";
-      rankH += `<tr style="background:${rowBg};border-bottom:1px solid #F3F4F6;">`;
-      rankH += `<td style="padding:7px 10px;text-align:center;font-weight:800;color:${idx < 3 ? '#059669' : '#6B7280'};font-size:${idx < 3 ? '14px' : '12px'};">${medal}</td>`;
-      rankH += `<td style="padding:7px 10px;font-family:'SF Mono',Consolas,monospace;font-weight:600;font-size:11px;color:#1F2937;">${s.usn}</td>`;
-      rankH += `<td style="padding:7px 10px;color:#374151;font-size:12px;">${s.name || "—"}</td>`;
-      rankH += `<td style="padding:7px 10px;text-align:center;font-weight:800;font-size:13px;color:#059669;">${sg.toFixed(2)}</td>`;
-      rankH += '</tr>';
-    });
-    rankH += '</tbody></table></div>';
-    sgpaRankEl.innerHTML = rankH;
-  } else {
-    sgpaRankEl.innerHTML = '<div style="color:#6B7280;font-size:13px;text-align:center;padding:20px;">No SGPA data available</div>';
-  }
+  cgpaModalData = cgpaList.slice().sort((a, b) => b.cg - a.cg);
+  renderRankings();
 
   /* ---- Failed Students ---- */
   const failedStudents = [];
@@ -2783,6 +2872,8 @@ function renderStudentRecord(data, container) {
     const val = semSGPAs[i] !== undefined ? semSGPAs[i] : "—";
     html += `<div class="sr-sem-cell"><div class="sr-sem-label">${ordinal(i)}</div><div class="sr-sem-val">${val}</div></div>`;
   }
+  html += `<div class="sr-sem-cell sr-cgpa"><div class="sr-sem-label">CGPA</div><div class="sr-sem-val">${
+    (typeof data.cgpa === "number" && isFinite(data.cgpa)) ? data.cgpa.toFixed(2) : "—" }</div></div>`;
   html += `<div class="sr-sem-cell sr-cgpa"><div class="sr-sem-label">Mean CGPA</div><div class="sr-sem-val">${cgpa}</div></div>`;
   html += `<div class="sr-sem-cell sr-backlogs"><div class="sr-sem-label">Backlogs</div><div class="sr-sem-val">${totalBacklogs}</div></div>`;
   html += '</div>';
@@ -2856,15 +2947,85 @@ function ordinal(n) {
   return s[n] || n + "TH";
 }
 
-/* ---- SGPA Rankings Modal ---- */
+/* ---- Student Performance Ranking (SGPA / CGPA) ---- */
 let sgpaModalData = [];
+let cgpaModalData = [];
+let rankMode = "sgpa";        /* in-memory only: survives batch switches, resets on refresh */
 let _openSubjCode = null;
+
+const rankList = () => (rankMode === "cgpa" ? cgpaModalData : sgpaModalData);
+const rankValue = e => (rankMode === "cgpa" ? e.cg : e.sg);
+const rankColLabel = () => (rankMode === "cgpa" ? "CGPA" : "SGPA");
+const rankTitle = () => (rankMode === "cgpa" ? "Student CGPA Rankings" : "Student SGPA Rankings");
+
+function renderRankings() {
+  const el = $("an_sgpa_rankings");
+  if (!el) return;
+  const list = rankList();
+  $("an_rank_lbl").textContent = (rankMode === "cgpa" ? "CGPA" : "SGPA") + " Ranking";
+  document.querySelectorAll("#an_rank_menu .rk-sel-row").forEach(r => {
+    r.querySelector(".tick").textContent = r.dataset.mode === rankMode ? "✓" : "";
+  });
+  if (!list.length) {
+    el.innerHTML = '<div style="color:#6B7280;font-size:13px;text-align:center;padding:20px;">No ' +
+      rankColLabel() + ' data available</div>';
+    return;
+  }
+  let h = '<div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;max-height:320px;overflow-y:auto;">';
+  h += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  h += '<thead style="position:sticky;top:0;z-index:1;"><tr style="background:linear-gradient(135deg,#10B981 0%,#059669 100%);">';
+  h += '<th style="padding:8px 10px;text-align:center;font-weight:700;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.05em;width:40px;">Rank</th>';
+  h += '<th style="padding:8px 10px;text-align:left;font-weight:700;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">USN</th>';
+  h += '<th style="padding:8px 10px;text-align:left;font-weight:700;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Name</th>';
+  h += '<th style="padding:8px 10px;text-align:center;font-weight:700;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.05em;width:60px;">' + rankColLabel() + '</th>';
+  h += '</tr></thead><tbody>';
+  list.forEach((entry, idx) => {                       /* sequential ranks: 1,2,3,4… even on ties */
+    const val = rankValue(entry);
+    const s = entry.s;
+    const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : (idx + 1);
+    let rowBg = idx % 2 === 0 ? "#fff" : "#F9FAFB";
+    if (idx === 0) rowBg = "#FFFBEB";
+    else if (idx === 1) rowBg = "#F9FAFB";
+    else if (idx === 2) rowBg = "#FEF3C7";
+    h += `<tr style="background:${rowBg};border-bottom:1px solid #F3F4F6;">`;
+    h += `<td style="padding:7px 10px;text-align:center;font-weight:800;color:${idx < 3 ? '#059669' : '#6B7280'};font-size:${idx < 3 ? '14px' : '12px'};">${medal}</td>`;
+    h += `<td style="padding:7px 10px;font-family:'SF Mono',Consolas,monospace;font-weight:600;font-size:11px;color:#1F2937;">${s.usn}</td>`;
+    h += `<td style="padding:7px 10px;color:#374151;font-size:12px;">${s.name || "—"}</td>`;
+    h += `<td style="padding:7px 10px;text-align:center;font-weight:800;font-size:13px;color:#059669;">${val.toFixed(2)}</td>`;
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  el.innerHTML = h;
+}
+
+/* selector dropdown */
+(function initRankSelect() {
+  const sel = $("an_rank_sel");
+  if (!sel) return;
+  const open = v => { sel.classList.toggle("open", v); };
+  $("an_rank_btn").addEventListener("click", e => { e.stopPropagation(); open(!sel.classList.contains("open")); });
+  $("an_rank_menu").addEventListener("click", e => {
+    const row = e.target.closest(".rk-sel-row");
+    if (!row) return;
+    e.stopPropagation();
+    if (row.dataset.mode !== rankMode) {
+      rankMode = row.dataset.mode;
+      renderRankings();
+    }
+    open(false);
+  });
+  document.addEventListener("click", () => open(false));
+})();
+
+/* ---- Rankings Modal (follows the selected ranking type) ---- */
 function openSgpaModal() {
-  if (!sgpaModalData.length) return;
+  const list = rankList();
+  if (!list.length) return;
+  const col = rankColLabel();
   let h = '<div id="sgpa_modal_overlay" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.4);backdrop-filter:blur(4px);" onclick="if(event.target===this)closeSgpaModal()">';
   h += '<div style="background:#fff;border-radius:16px;width:90%;max-width:650px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.2);">';
   h += '<div style="padding:18px 24px;border-bottom:1px solid #E5E7EB;display:flex;align-items:center;justify-content:space-between;">';
-  h += '<div><div style="font-size:16px;font-weight:800;color:#111827;">Student SGPA Rankings</div><div style="font-size:12px;color:#6B7280;margin-top:2px;">' + sgpaModalData.length + ' students</div></div>';
+  h += '<div><div style="font-size:16px;font-weight:800;color:#111827;">' + rankTitle() + '</div><div style="font-size:12px;color:#6B7280;margin-top:2px;">' + list.length + ' students</div></div>';
   h += '<button onclick="closeSgpaModal()" style="background:none;border:none;font-size:20px;color:#6B7280;cursor:pointer;padding:4px 8px;border-radius:6px;transition:background .15s;" onmouseover="this.style.background=\'#F3F4F6\'" onmouseout="this.style.background=\'none\'">&times;</button>';
   h += '</div>';
   h += '<div style="flex:1;overflow-y:auto;padding:0;">';
@@ -2873,10 +3034,10 @@ function openSgpaModal() {
   h += '<th style="padding:10px 14px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;width:50px;">Rank</th>';
   h += '<th style="padding:10px 14px;text-align:left;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">USN</th>';
   h += '<th style="padding:10px 14px;text-align:left;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;">Name</th>';
-  h += '<th style="padding:10px 14px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;width:70px;">SGPA</th>';
+  h += '<th style="padding:10px 14px;text-align:center;font-weight:700;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.05em;width:70px;">' + col + '</th>';
   h += '</tr></thead><tbody>';
-  sgpaModalData.forEach((entry, idx) => {
-    const sg = entry.sg, s = entry.s;
+  list.forEach((entry, idx) => {
+    const val = rankValue(entry), s = entry.s;
     const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : (idx + 1);
     let rowBg = idx % 2 === 0 ? "#fff" : "#F9FAFB";
     if (idx === 0) rowBg = "#FFFBEB";
@@ -2886,7 +3047,7 @@ function openSgpaModal() {
     h += `<td style="padding:10px 14px;text-align:center;font-weight:800;color:${idx < 3 ? '#059669' : '#6B7280'};font-size:${idx < 3 ? '16px' : '13px'};">${medal}</td>`;
     h += `<td style="padding:10px 14px;font-family:'SF Mono',Consolas,monospace;font-weight:600;font-size:12px;color:#1F2937;">${s.usn}</td>`;
     h += `<td style="padding:10px 14px;color:#374151;">${s.name || "—"}</td>`;
-    h += `<td style="padding:10px 14px;text-align:center;font-weight:800;font-size:15px;color:#059669;">${sg.toFixed(2)}</td>`;
+    h += `<td style="padding:10px 14px;text-align:center;font-weight:800;font-size:15px;color:#059669;">${val.toFixed(2)}</td>`;
     h += '</tr>';
   });
   h += '</tbody></table></div></div></div>';

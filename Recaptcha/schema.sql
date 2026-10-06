@@ -23,8 +23,12 @@ CREATE TABLE IF NOT EXISTS student_results (
     subjects JSONB DEFAULT '[]',
     percentage REAL,
     sgpa REAL,
+    cgpa REAL,
     result_status TEXT
 );
+
+-- Existing installations: add the CGPA written by "Compute Yearly CGPA"
+ALTER TABLE student_results ADD COLUMN IF NOT EXISTS cgpa REAL;
 
 CREATE INDEX IF NOT EXISTS idx_students_batch ON student_results(batch_id);
 CREATE INDEX IF NOT EXISTS idx_students_usn ON student_results(usn);

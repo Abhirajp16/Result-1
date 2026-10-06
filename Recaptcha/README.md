@@ -120,6 +120,7 @@ SUPABASE_KEY=<service_role or anon key>
 ```
 
 Run `schema.sql` in the Supabase SQL Editor once (it creates `fetch_batches` and `student_results`).
+On an older database, run it again — `ALTER TABLE student_results ADD COLUMN IF NOT EXISTS cgpa REAL;` adds the column **Compute Yearly CGPA** writes to (the app detects the column and only saves when it exists).
 If `.env` is missing/wrong, the header shows **"DB off"** and every DB action returns a clear error — nothing crashes.
 
 ### Start the server
@@ -142,7 +143,9 @@ Then open **http://127.0.0.1:5000**
 4. **Save to Database** — pick year / scheme / semester / department (or merge into an existing batch). Re-saving now **merges** students: existing rows are updated instead of skipped, and subjects are unioned so nothing is lost.
 5. **Student Record** — open `/student-record`, enter a USN.
 6. **Analytics / Browse** — analyse or filter saved batches; export a batch to Excel.
-7. **SGPA / CGPA** — enter credits per subject per batch (`save-credits`), then compute SGPA/CGPA (`compute-yearly-cgpa`).
+7. **SGPA / CGPA** — enter credits per subject per batch (`save-credits`) for the SGPA. **Compute Yearly CGPA** then asks for a batch and a semester set (*Select all* or *Manual select*, e.g. 5 & 6 for the 3rd year) and applies
+   `CGPA = Σ(Course Credits × Grade Points) ÷ Σ(Course Credits)` over those courses **excluding F grades** (`compute-yearly-cgpa`).
+   A semester with no saved result is skipped — never 0, never an error. The result is stored in `student_results.cgpa` and shown in the Analytics CGPA ranking and in the student record.
 
 ### How the student record is laid out (VTU format)
 
@@ -199,10 +202,10 @@ BCS502       | COMPUTER NETWORKS | 40 | 20 | 60 | P | 2026-07-28
 | client → server | `save-to-db` | Save/merge the last fetch into the DB |
 | client → server | `get-batches` / `get-batch-results` / `delete-batch` | Browse tab |
 | client → server | `get-fetched-subjects` / `save-credits` / `get-credits` | SGPA/CGPA credits |
-| client → server | `compute-yearly-cgpa` | CGPA over a semester pair (1-2, 3-4, 5-6) |
+| client → server | `compute-yearly-cgpa` | CGPA for a batch over the selected semesters (missing semesters skipped) |
 | client → server | `start-reval-fetch` / `compare-reval` / `update-reval-result` | Revaluation tab |
 | server → client | `log-message`, `fetch-started`, `fetch-progress`, `fetch-complete`, `download-ready` | Live status |
-| server → client | `save-to-db-complete`, `batch-results`, `credits-saved`, `reval-compare`, `reval-updated` | Results of each action |
+| server → client | `save-to-db-complete`, `batch-results`, `credits-saved`, `yearly-cgpa-result`, `reval-compare`, `reval-updated` | Results of each action |
 
 ---
 

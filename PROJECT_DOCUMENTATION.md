@@ -628,7 +628,7 @@ Plus a **run ID** (`YYYYMMDD-HHMMSS`): logged at fetch start, passed to the scra
 
 - Two collections in the `vtu_results` DB:
   - `fetch_batches` — `{year, scheme, semester, department, saved_at, usn_prefix, student_count, subjects[], run_id}`
-  - `student_results` — `{batch_id, usn, name, subjects[{code, subject_name, internal, external, total, result}], percentage, result_status}`
+  - `student_results` — `{batch_id, usn, name, subjects[{code, subject_name, internal, external, total, result}], percentage, sgpa, cgpa, result_status}`
 - `save-to-db` event: validates fields → `build_db_payload()` reads the just-fetched `raw_results.csv`/`raw_summary.csv` → inserts batch + N students → emits `save-to-db-complete`.
 - `get-batches` / `get-batch-results` feed the Analytics & Browse tabs.
 - `/export-batch/<batch_id>` rebuilds an Excel from **DB data only** (independent of the live file).
