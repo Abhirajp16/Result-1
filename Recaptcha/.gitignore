@@ -3,6 +3,7 @@ venv/
 .venv/
 env/
 .env
+.app_secret_key
 
 # Python Bytecode and Cache
 __pycache__/

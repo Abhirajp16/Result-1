@@ -98,7 +98,7 @@ function render(d){
   var h='';
   h+='<div class="hdr"><div><h2>'+code+'</h2><div class="sub">Subject-wise marks analysis &mdash; all students ranked</div></div>';
   h+='<div style="text-align:right;"><div class="pill">'+processed.length+' students</div>';
-  if(batch)h+='<div class="info">'+(batch.department||"")+' &middot; Sem '+(batch.semester||"")+' &middot; '+(batch.scheme||"")+'</div>';
+  if(batch)h+='<div class="info">'+(batch.department||"")+' &middot; Sem '+(batch.semester||"")+' &middot; '+(batch.scheme&&batch.year&&batch.scheme!==batch.year ? batch.scheme+' &ndash; '+batch.year : (batch.scheme||batch.year||""))+'</div>';
   h+='</div></div>';
 
   h+='<div class="stats">';

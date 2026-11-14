@@ -281,7 +281,7 @@ def create_batch(department, year, scheme, semester):
     scheme = str(scheme or "").strip()
     semester = str(semester or "").strip()
     if not (department and year and scheme and semester):
-        return None, False, "year, scheme, semester and department are all required"
+        return None, False, "batch from, batch to, semester and department are all required"
     try:
         existing = client.table("fetch_batches").select("id").eq("year", year) \
             .eq("scheme", scheme).eq("semester", semester).eq("department", department).execute()

@@ -3,10 +3,12 @@ import os
 import re
 import sys
 import time
+import hmac
+import secrets
 import subprocess
 import pandas as pd
 from datetime import datetime
-from flask import Flask, render_template, send_from_directory, send_file, make_response, jsonify, request
+from flask import Flask, render_template, send_from_directory, send_file, make_response, jsonify, request, session, redirect, url_for
 from flask_socketio import SocketIO, emit
 import db
 from excel_header import HEADER_ROWS, DATA_HEADER_ROW, apply_header
@@ -26,6 +28,109 @@ current_run_id = None
 
 app = Flask(__name__)
 socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
+
+
+# -----------------------------------------
+# AUTH (single shared login) — ADDITIVE ONLY
+# -----------------------------------------
+def _load_secret_key():
+    """Session signing key: env var, else a persisted file, else random."""
+    key = (os.environ.get("APP_SECRET_KEY") or "").strip()
+    if key:
+        return key
+    key_file = os.path.join(BASE_DIR, ".app_secret_key")
+    try:
+        if os.path.exists(key_file):
+            with open(key_file, "r", encoding="utf-8") as f:
+                existing = f.read().strip()
+            if existing:
+                return existing
+        key = secrets.token_hex(32)
+        with open(key_file, "w", encoding="utf-8") as f:
+            f.write(key)
+        return key
+    except Exception:
+        return secrets.token_hex(32)
+
+
+app.secret_key = _load_secret_key()
+
+# Shared credentials. Set APP_USERNAME / APP_PASSWORD in .env —
+# falls back to admin / admin (a warning is printed once at startup).
+APP_USERNAME = (os.environ.get("APP_USERNAME") or "admin").strip()
+APP_PASSWORD = os.environ.get("APP_PASSWORD") or "admin"
+if not os.environ.get("APP_PASSWORD"):
+    print("[AUTH] APP_PASSWORD not set in .env — using the default 'admin'. Set it before sharing this app.")
+
+LOGIN_PAGE = "/login"
+# Paths reachable without a session.
+PUBLIC_PREFIXES = ("/static", "/socket.io")
+PUBLIC_PATHS = {LOGIN_PAGE, "/favicon.ico"}
+
+
+def _is_public(path):
+    if path in PUBLIC_PATHS:
+        return True
+    return any(path == p or path.startswith(p + "/") for p in PUBLIC_PREFIXES)
+
+
+@app.before_request
+def _require_login():
+    """Redirect every page/API to /login when there is no valid session."""
+    if session.get("user") == APP_USERNAME:
+        return None
+    if _is_public(request.path):
+        return None
+    # XHR / fetch callers get JSON instead of an HTML redirect
+    if request.path.startswith("/api/") or request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return jsonify({"error": "unauthorized"}), 401
+    return redirect(url_for("login_page", next=request.path))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login_page():
+    if session.get("user") == APP_USERNAME:
+        return redirect(url_for("index"))
+
+    error = None
+    if request.method == "POST":
+        u = str(request.form.get("username", "") or "").strip()
+        p = str(request.form.get("password", "") or "")
+        # constant-time compares so the credentials can't be probed by timing
+        if hmac.compare_digest(u.encode("utf-8"), APP_USERNAME.encode("utf-8")) and \
+           hmac.compare_digest(p.encode("utf-8"), APP_PASSWORD.encode("utf-8")):
+            session.clear()
+            session["user"] = APP_USERNAME
+            session.permanent = True
+            nxt = request.args.get("next", "")
+            # only ever bounce back to a local path
+            if nxt.startswith("/") and not nxt.startswith("//"):
+                return redirect(nxt)
+            return redirect(url_for("index"))
+        time.sleep(0.4)          # slow down brute force
+        error = "Incorrect username or password."
+
+    resp = make_response(render_template("login.html", error=error))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login_page"))
+
+
+@socketio.on("connect")
+def _socket_auth():
+    """Refuse the socket connection unless the caller is logged in."""
+    if session.get("user") == APP_USERNAME:
+        return True
+    print("[AUTH] Rejected unauthenticated socket connection.")
+    return False
+
 
 
 # -----------------------------------------
@@ -505,7 +610,8 @@ def _auto_save_to_db(run_id):
     sem_match = re.match(r"(\d)", usns[0])
     semester = str(int(sem_match.group(1))) if sem_match else "1"
 
-    year = scheme
+    # Batch range: start year from USN, end year = start + 4 (e.g. 2023 -> 2027)
+    year = str(int(scheme) + 4) if scheme.isdigit() else scheme
 
     socketio.emit("log-message", {
         "data": f"[DB] Auto-saving: year={year}, scheme={scheme}, semester={semester}, dept={department}\n"
@@ -790,7 +896,7 @@ def save_to_db(data):
         department = str(batch.get("department", "") or "").strip()
 
     if not (year and scheme and semester and department):
-        emit("log-message", {"data": "[DB ERROR] year, scheme, semester and department are all required.\n"})
+        emit("log-message", {"data": "[DB ERROR] Batch From, Batch To, semester and department are all required.\n"})
         return
 
     batch_results, err = build_db_payload(year, scheme, semester, department)
@@ -848,13 +954,13 @@ def create_batch(data):
     if not db.is_connected():
         return fail(f"MongoDB not available: {db.status_msg}")
     if not (year and scheme and semester and department):
-        return fail("Year, Scheme, Semester and Department are all required.")
+        return fail("Batch From, Batch To, Semester and Department are all required.")
 
     batch_id, created, err = db.create_batch(department, year, scheme, semester)
     if batch_id is None:
         return fail(err or "Could not create the batch.")
 
-    label = f"{department} · {scheme} — {year} · Sem {semester}"
+    label = f"{department} · {scheme} – {year} · Sem {semester}"
     if created:
         emit("log-message", {"data": f"[DB] Created new batch {label} ({batch_id}).\n"})
     else:

@@ -196,37 +196,68 @@ select option { font-weight: 500; color: var(--ink); background: var(--card); }
 .hsel { position: relative; width: 100%; }
 .hsel-btn {
   display: flex; align-items: center; gap: 8px; width: 100%;
-  padding: 10px 14px; border: 1px solid #D1D5DB; border-radius: 10px;
-  background: #fff; font: inherit; font-size: 13px; font-weight: 600; color: #1F2937;
+  padding: 11px 14px; border: 1px solid #D1D5DB; border-radius: 10px;
+  background: #fff; font: inherit; font-size: 13.5px; font-weight: 600; color: #1F2937;
   cursor: pointer; text-align: left; transition: border-color .2s, box-shadow .2s;
 }
 .hsel-btn:hover { border-color: var(--forest); }
 .hsel-btn:focus-visible { outline: none; border-color: var(--forest); box-shadow: 0 0 0 3px rgba(28,122,94,.15); }
-.hsel-btn .hsel-lbl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hsel-btn .hsel-lbl { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.hsel-btn .hsel-lbl .hsel-lbl-txt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hsel-btn .hsel-ph { color: #9CA3AF; font-weight: 500; }
 .hsel-btn .chev { flex: 0 0 auto; color: var(--forest); transition: transform .2s ease; }
 .hsel.open .chev { transform: rotate(180deg); }
+
+/* inline count chip — never truncated */
+.hsel-badge {
+  flex: 0 0 auto; white-space: nowrap;
+  background: #EEF4F1; color: var(--pine); border: 1px solid #D7E5DE;
+  font-size: 11px; font-weight: 700; letter-spacing: .02em;
+  padding: 3px 9px; border-radius: 999px;
+}
+
 .hsel-menu {
   position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 90;
-  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-  box-shadow: var(--shadow-lg); max-height: 300px; overflow-y: auto;
-  padding: 6px; display: none;
+  min-width: 360px; max-width: calc(100vw - 32px);   /* wider, roomy panel */
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: var(--shadow-lg); max-height: 360px; overflow-y: auto;
+  padding: 8px; display: none;
 }
 .hsel.open .hsel-menu { display: block; animation: fadeUp .15s ease; }
-.hsel-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 9px 12px; border-radius: 8px; cursor: pointer;
-  font-size: 13.5px; font-weight: 600; color: var(--ink);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+/* centered popup variant — small panel over a dim backdrop (menu moves to <body> while open) */
+.hsel-backdrop { position: fixed; inset: 0; background: rgba(17,24,39,.45); z-index: 9600; }
+.hsel-menu.centered {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  z-index: 9610; display: none;
+  width: min(340px, calc(100vw - 40px)); min-width: 0;
+  max-width: calc(100vw - 40px); max-height: min(420px, 80vh);
 }
-.hsel-row .hsel-arrow { flex: 0 0 auto; width: 12px; font-size: 10px; color: #9CA3AF; }
-.hsel-row.dept { font-size: 12.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--forest); }
-.hsel-row.year { font-weight: 700; color: #374151; }
+.hsel-menu.centered.is-open { display: block; animation: hselPop .15s ease; }
+@keyframes hselPop { from { opacity: 0; } to { opacity: 1; } }   /* opacity only — fadeUp's transform would break centering */
+.hsel-menu::-webkit-scrollbar { width: 9px; }
+.hsel-menu::-webkit-scrollbar-thumb { background: #CBD8D1; border-radius: 99px; }
+.hsel-menu::-webkit-scrollbar-track { background: transparent; }
+
+.hsel-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 9px; cursor: pointer;
+  font-size: 13.5px; font-weight: 600; color: var(--ink);
+}
+.hsel-row .hsel-arrow { flex: 0 0 auto; width: 13px; font-size: 10px; color: #9CA3AF; }
+.hsel-row .hsel-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hsel-row.dept {
+  font-size: 12.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--forest); background: #F3F8F5; padding-top: 12px; padding-bottom: 12px;
+}
+.hsel-menu .hsel-row.dept:not(:first-child) { border-top: 1px dashed var(--line); margin-top: 8px; }
+.hsel-row.year { font-weight: 700; color: #374151; background: #FAFBFA; margin-top: 4px; }
+.hsel-row.leaf { font-weight: 600; color: #1F2937; margin-top: 3px; }
 .hsel-row:hover { background: var(--accent-soft); color: var(--pine); }
 .hsel-row.leaf.sel { background: var(--forest); color: #fff; }
 .hsel-row.leaf.sel:hover { background: var(--pine); }
-.hsel-empty { padding: 12px; font-size: 13px; color: var(--muted); }
-.hsel-row.foot { border-top: 1px dashed var(--line); margin-top: 4px; padding-top: 11px; font-weight: 800; color: var(--pine); }
+.hsel-row.leaf.sel .hsel-badge { background: rgba(255,255,255,.18); color: #fff; border-color: rgba(255,255,255,.35); }
+.hsel-empty { padding: 14px; font-size: 13px; color: var(--muted); }
+.hsel-row.foot { border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 13px; font-weight: 800; color: var(--pine); }
 .hsel-row.foot:hover { background: var(--accent-soft); }
 .cdrop-menu::-webkit-scrollbar { width: 8px; }
 .cdrop-menu::-webkit-scrollbar-thumb { background: #CBD8D1; border-radius: 99px; }
@@ -566,6 +597,7 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
       </div>
       <div class="brand-r">
         <span id="db_badge" class="db-badge off"><span class="dot"></span>MongoDB …</span>
+        <a href="/logout" class="db-badge" style="text-decoration:none;cursor:pointer;" title="Log out">Logout</a>
       </div>
     </div>
     <nav class="tabs">
@@ -802,8 +834,8 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
       <div class="row" style="flex-wrap:wrap;">
         <div><label class="lbl">Department</label><select id="flt_dept"></select></div>
         <div><label class="lbl">Semester</label><select id="flt_sem"></select></div>
-        <div><label class="lbl">Scheme</label><select id="flt_scheme"></select></div>
-        <div><label class="lbl">Year</label><select id="flt_year"></select></div>
+        <div><label class="lbl">Batch From</label><select id="flt_scheme"></select></div>
+        <div><label class="lbl">Batch To</label><select id="flt_year"></select></div>
         <div style="flex:0 0 auto;align-self:flex-end;"><button class="btn" id="export_btn" disabled>Export to Excel</button></div>
         <div style="flex:0 0 auto;align-self:flex-end;"><button class="btn" id="sr_toggle_btn" style="white-space:nowrap;background:linear-gradient(135deg,#059669,#065F46);color:#fff;border-color:transparent;">&#128269; Student Record</button></div>
       </div>
@@ -860,8 +892,8 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
       </div>
     </div>
     <div class="row" style="margin-bottom:14px;">
-      <div><label class="lbl">Year</label><input type="text" id="db_year" placeholder="2025"></div>
-      <div><label class="lbl">Scheme</label><input type="text" id="db_scheme" placeholder="2022"></div>
+      <div><label class="lbl">Batch From</label><input type="text" id="db_from" placeholder="2023"></div>
+      <div><label class="lbl">Batch To</label><input type="text" id="db_to" placeholder="2027"></div>
     </div>
     <div class="row" style="margin-bottom:20px;">
       <div><label class="lbl">Semester</label><input type="text" id="db_semester" placeholder="3"></div>
@@ -880,8 +912,8 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
     <h3 style="margin:0 0 4px;">Create New Batch</h3>
     <p style="color:var(--muted);font-size:13px;margin:0 0 18px;">Adds an empty batch to the database. It appears straight away in the "Store into" list — fetch VTU results and use <b>Save to Database</b> to fill it.</p>
     <div class="row" style="margin-bottom:14px;">
-      <div><label class="lbl">Year</label><input type="text" id="nb_year" placeholder="2025"></div>
-      <div><label class="lbl">Scheme</label><input type="text" id="nb_scheme" placeholder="2022"></div>
+      <div><label class="lbl">Batch From</label><input type="text" id="nb_from" placeholder="2023"></div>
+      <div><label class="lbl">Batch To</label><input type="text" id="nb_to" placeholder="2027"></div>
     </div>
     <div class="row" style="margin-bottom:14px;">
       <div><label class="lbl">Semester</label><input type="text" id="nb_semester" placeholder="3"></div>
@@ -1183,6 +1215,10 @@ $("db_cancel_btn").addEventListener("click", () => $("db_modal").classList.remov
 /* ── Expandable hierarchical batch picker — ONE dropdown: Dept ▸ Year ▸ Semester ──
    Dept / Year rows only expand-collapse. Only a Semester row selects a batch id. */
 const hierMap = new WeakMap();
+let hselOpenInst = null;   /* the one picker currently open — the backdrop blocks the rest */
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && hselOpenInst) hselOpenInst.setOpen(false);
+});
 
 const hEsc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -1204,10 +1240,12 @@ function buildBatchTree(list) {
     const year = String(b.year || "");
     const yKey = scheme + "|" + year;
     let y = d.yIdx.get(yKey);
-    if (!y) { y = { key: yKey, label: year ? (scheme + " — " + year) : scheme, sems: [] }; d.yIdx.set(yKey, y); d.years.push(y); }
+    if (!y) { y = { key: yKey, label: year ? (scheme + " – " + year) : scheme, sems: [] }; d.yIdx.set(yKey, y); d.years.push(y); }
     y.sems.push({
       id: b.id,
       label: "Sem " + (b.semester || "?") + " (" + (b.student_count || 0) + " students)",
+      semLabel: "Sem " + (b.semester || "?"),
+      count: b.student_count || 0,
       dept: dName, yearKey: yKey, yearLabel: y.label
     });
   });
@@ -1221,9 +1259,9 @@ function findHierLeaf(tree, id) {
   return null;
 }
 
-function hierSelectFor(sel, placeholderText, footer) {
+function hierSelectFor(sel, placeholderText, footer, opts) {
   let inst = hierMap.get(sel);
-  if (inst) { inst.placeholder = placeholderText; inst.footer = footer || null; return inst; }
+  if (inst) { inst.placeholder = placeholderText; inst.footer = footer || null; inst.centered = !!(opts && opts.centered); return inst; }
 
   sel.style.display = "none";
   const wrap = document.createElement("div");
@@ -1245,7 +1283,7 @@ function hierSelectFor(sel, placeholderText, footer) {
   wrap.appendChild(menu);
   sel.insertAdjacentElement("afterend", wrap);
 
-  inst = { sel, wrap, btn, lbl, menu, placeholder: placeholderText, tree: [], expanded: new Set(), footer: footer || null };
+  inst = { sel, wrap, btn, lbl, menu, placeholder: placeholderText, tree: [], expanded: new Set(), footer: footer || null, centered: !!(opts && opts.centered) };
 
   const key = (kind, k) => kind + ":" + k;
   const isOpen = () => wrap.classList.contains("open");
@@ -1257,46 +1295,74 @@ function hierSelectFor(sel, placeholderText, footer) {
     let html = "";
     inst.tree.forEach(d => {
       const dOpen = inst.expanded.has(key("d", d.name));
-      html += '<div class="hsel-row dept" data-kind="d" data-key="' + hEsc(d.name) + '" style="padding-left:10px">' +
-              '<span class="hsel-arrow">' + arrow(dOpen) + '</span>' + hEsc(d.name) + '</div>';
+      html += '<div class="hsel-row dept" data-kind="d" data-key="' + hEsc(d.name) + '" style="padding-left:14px">' +
+              '<span class="hsel-arrow">' + arrow(dOpen) + '</span><span class="hsel-name">' + hEsc(d.name) + '</span></div>';
       if (!dOpen) return;
       d.years.forEach(y => {
         const yk = d.name + "|" + y.key;
         const yOpen = inst.expanded.has(key("y", yk));
-        html += '<div class="hsel-row year" data-kind="y" data-key="' + hEsc(yk) + '" style="padding-left:26px">' +
-                '<span class="hsel-arrow">' + arrow(yOpen) + '</span>' + hEsc(y.label) + '</div>';
+        html += '<div class="hsel-row year" data-kind="y" data-key="' + hEsc(yk) + '" style="padding-left:36px">' +
+                '<span class="hsel-arrow">' + arrow(yOpen) + '</span><span class="hsel-name">' + hEsc(y.label) + '</span></div>';
         if (!yOpen) return;
         y.sems.forEach(s => {
           const on = s.id === cur;
-          html += '<div class="hsel-row leaf' + (on ? " sel" : "") + '" data-kind="l" data-id="' + hEsc(s.id) + '" style="padding-left:46px">' +
-                  '<span class="hsel-arrow">' + (on ? "✓" : "") + '</span>' + hEsc(s.label) + '</div>';
+          html += '<div class="hsel-row leaf' + (on ? " sel" : "") + '" data-kind="l" data-id="' + hEsc(s.id) + '" style="padding-left:60px">' +
+                  '<span class="hsel-arrow">' + (on ? "✓" : "") + '</span>' +
+                  '<span class="hsel-name">' + hEsc(s.semLabel || s.label) + '</span>' +
+                  (s.count != null ? '<span class="hsel-badge">' + s.count + ' students</span>' : '') + '</div>';
         });
       });
     });
     if (!html) html = '<div class="hsel-empty">No saved batches yet</div>';
     if (inst.footer) {                       /* e.g. ➕ Create New Batch, always last */
-      html += '<div class="hsel-row foot" data-kind="f" style="padding-left:12px">' +
-              '<span class="hsel-arrow"></span>' + hEsc(inst.footer.label) + '</div>';
+      html += '<div class="hsel-row foot" data-kind="f" style="padding-left:14px">' +
+              '<span class="hsel-arrow"></span><span class="hsel-name">' + hEsc(inst.footer.label) + '</span></div>';
     }
     menu.innerHTML = html;
   };
 
   inst.syncLabel = () => {
     const leaf = findHierLeaf(inst.tree, sel.value);
-    if (leaf) { lbl.className = "hsel-lbl"; lbl.textContent = leaf.dept + " · " + leaf.yearLabel + " · " + leaf.label; }
+    if (leaf) {
+      const txt = leaf.dept + " · " + leaf.yearLabel + " · " + (leaf.semLabel || leaf.label);
+      lbl.className = "hsel-lbl";
+      lbl.innerHTML = '<span class="hsel-lbl-txt">' + hEsc(txt) + '</span>' +
+        (leaf.count != null ? '<span class="hsel-badge">' + leaf.count + ' students</span>' : '');
+    }
     else { lbl.className = "hsel-lbl hsel-ph"; lbl.textContent = inst.placeholder; }
   };
 
   inst.setOpen = open => {
     if (open === isOpen()) { if (!open) document.removeEventListener("click", onDocClick); return; }
     if (open) {
+      if (hselOpenInst && hselOpenInst !== inst) hselOpenInst.setOpen(false);   /* only one picker at a time */
       const cur = findHierLeaf(inst.tree, sel.value);
       if (cur) { inst.expanded.add(key("d", cur.dept)); inst.expanded.add(key("y", cur.yearKey)); }
       inst.render();
       wrap.classList.add("open");
+      if (inst.centered) {
+        menu.classList.add("centered", "is-open");             /* small centered popup */
+        if (!document.getElementById("hsel_backdrop")) {       /* dim backdrop behind it */
+          const bd = document.createElement("div");
+          bd.id = "hsel_backdrop";
+          bd.className = "hsel-backdrop";
+          bd.addEventListener("click", e => { e.stopPropagation(); inst.setOpen(false); });
+          document.body.appendChild(bd);
+        }
+        document.body.appendChild(menu);                       /* fixed centering is exact on <body> */
+      }
+      hselOpenInst = inst;
       document.addEventListener("click", onDocClick);
     } else {
       wrap.classList.remove("open");
+      if (inst.centered) {
+        menu.classList.remove("is-open");
+        const bd = document.getElementById("hsel_backdrop");
+        if (bd) bd.remove();
+        wrap.appendChild(menu);                                /* menu lives back with its button */
+        menu.classList.remove("centered");
+      }
+      if (hselOpenInst === inst) hselOpenInst = null;
       document.removeEventListener("click", onDocClick);
     }
   };
@@ -1330,9 +1396,10 @@ function hierSelectFor(sel, placeholderText, footer) {
   return inst;
 }
 
-function fillHierSelect(sel, placeholderText, footer) {
+function fillHierSelect(sel, placeholderText, footer, opts) {
   if (!sel) return;
-  const inst = hierSelectFor(sel, placeholderText, footer);
+  if (hselOpenInst) hselOpenInst.setOpen(false);   /* list is rebuilding — close any open picker */
+  const inst = hierSelectFor(sel, placeholderText, footer, opts);
   const prev = sel.value;
   const tree = buildBatchTree(batches);
   inst.tree = tree;
@@ -1362,17 +1429,17 @@ function syncHierLabel(sel) {
 
 function populateDbBatchSel() {
   fillHierSelect($("db_batch_sel"), "— create a new batch —",
-    { label: "➕ Create New Batch", onClick: openNewBatchModal });
+    { label: "➕ Create New Batch", onClick: openNewBatchModal }, { centered: true });
   updateMergeUI();
 }
 
 function updateMergeUI() {
   const merging = !!$("db_batch_sel").value;
   const b = merging ? batches.find(x => x.id === $("db_batch_sel").value) : null;
-  ["db_year", "db_scheme", "db_semester", "db_department"].forEach(id => { $(id).disabled = merging; $(id).required = !merging; });
+  ["db_from", "db_to", "db_semester", "db_department"].forEach(id => { $(id).disabled = merging; $(id).required = !merging; });
   if (b) {
-    $("db_year").value = b.year || "";
-    $("db_scheme").value = b.scheme || "";
+    $("db_from").value = b.scheme || "";   /* batch start year */
+    $("db_to").value = b.year || "";       /* batch end year */
     $("db_semester").value = b.semester || "";
     $("db_department").value = b.department || "";
   }
@@ -1382,12 +1449,12 @@ $("db_batch_sel").addEventListener("change", updateMergeUI);
 
 $("db_save_btn").addEventListener("click", () => {
   const target = $("db_batch_sel").value;
-  if (!target && (!$("db_year").value.trim() || !$("db_scheme").value.trim() || !$("db_semester").value.trim() || !$("db_department").value.trim())) {
+  if (!target && (!$("db_from").value.trim() || !$("db_to").value.trim() || !$("db_semester").value.trim() || !$("db_department").value.trim())) {
     toast("Fill all fields, or pick an existing batch to merge into"); return;
   }
   const payload = {
-    year: $("db_year").value.trim(),
-    scheme: $("db_scheme").value.trim(),
+    year: $("db_to").value.trim(),        /* batch end year */
+    scheme: $("db_from").value.trim(),    /* batch start year */
     semester: $("db_semester").value.trim(),
     department: $("db_department").value.trim(),
     target_batch_id: target,
@@ -1399,7 +1466,7 @@ $("db_save_btn").addEventListener("click", () => {
 
 /* ---------------- create new batch (Store into → ➕ Create New Batch) ---------------- */
 function openNewBatchModal() {
-  ["nb_year", "nb_scheme", "nb_semester", "nb_department"].forEach(id => { $(id).value = ""; });
+  ["nb_from", "nb_to", "nb_semester", "nb_department"].forEach(id => { $(id).value = ""; });
   $("nb_error").style.display = "none";
   $("nb_create_btn").disabled = false;
   $("nb_create_btn").textContent = "Create batch";
@@ -1420,13 +1487,13 @@ $("nb_modal").addEventListener("click", e => { if (e.target === $("nb_modal")) $
 
 $("nb_create_btn").addEventListener("click", () => {
   const payload = {
-    year: $("nb_year").value.trim(),
-    scheme: $("nb_scheme").value.trim(),
+    year: $("nb_to").value.trim(),        /* batch end year */
+    scheme: $("nb_from").value.trim(),    /* batch start year */
     semester: $("nb_semester").value.trim(),
     department: $("nb_department").value.trim(),
   };
   if (!payload.year || !payload.scheme || !payload.semester || !payload.department) {
-    nbFail("Year, Scheme, Semester and Department are all required.");
+    nbFail("Batch From, Batch To, Semester and Department are all required.");
     return;
   }
   $("nb_error").style.display = "none";
@@ -1452,7 +1519,7 @@ socket.on("batch-created", data => {
     inst.syncLabel();
     updateMergeUI();
   }
-  const label = data.department + " · " + data.scheme + " — " + data.year + " · Sem " + data.semester;
+  const label = data.department + " · " + data.scheme + " – " + data.year + " · Sem " + data.semester;
   toast(data.created ? "Batch created: " + label : "Batch already exists: " + label);
   logMsg("[DB] " + (data.created ? "New batch ready: " : "Existing batch found: ") + label + "\n");
 });
@@ -1569,7 +1636,7 @@ function rvLogMsg(msg) {
 }
 
 function rvPopulateBatches() {
-  fillHierSelect($("rv_batch_sel"), "— select batch —");
+  fillHierSelect($("rv_batch_sel"), "— select batch —", null, { centered: true });
 }
 
 $("rv_gen_btn").addEventListener("click", () => {
@@ -1828,7 +1895,7 @@ function renderRevalCompare(data) {
   html += '<div style="font-size:12px;color:#6B7280;font-weight:600;">' + autoImproved + ' subject(s) will be updated</div>';
   html += '<div style="margin-left:auto;display:flex;gap:10px;align-items:center;">';
   html += '<label style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.06em;">Store in:</label>';
-  html += '<select id="rv_update_batch" style="padding:9px 14px;border:1px solid #D1D5DB;border-radius:10px;font-size:13px;background:#fff;color:#1F2937;outline:none;transition:border-color .2s;max-width:340px;"><option value="">— select batch —</option></select>';
+  html += '<select id="rv_update_batch" style="padding:10px 14px;border:1px solid #D1D5DB;border-radius:10px;font-size:13px;background:#fff;color:#1F2937;outline:none;transition:border-color .2s;max-width:430px;min-width:260px;"><option value="">— select batch —</option></select>';
   html += '<button class="btn" onclick="rvUpdateStore(\'' + (data.usn || "") + '\')" style="background:linear-gradient(135deg,#10B981,#059669);color:#fff;border:none;padding:9px 20px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(5,150,105,.3);transition:transform .15s,box-shadow .15s;" onmouseover="this.style.transform=\'translateY(-1px)\';this.style.boxShadow=\'0 4px 12px rgba(5,150,105,.4)\'" onmouseout="this.style.transform=\'\';this.style.boxShadow=\'0 2px 8px rgba(5,150,105,.3)\'">Update & Store</button>';
   html += '</div>';
   html += '</div>';
@@ -1836,7 +1903,7 @@ function renderRevalCompare(data) {
   html += '</div>'; /* white card */
 
   area.innerHTML = html;
-  fillHierSelect($("rv_update_batch"), "— select batch —");
+  fillHierSelect($("rv_update_batch"), "— select batch —", null, { centered: true });
 }
 
 function rvUpdateStore(usn) {
@@ -1874,8 +1941,8 @@ socket.on("batches", data => {
   $("stat_batches").textContent = batches.length;
 
   const sel = $("an_batch_sel");
-  fillHierSelect(sel, "— select a saved batch —");   // hierarchy tree, keeps current selection
-  fillHierSelect($("cgpa_batch_sel"), "— select batch —");   /* Compute Yearly CGPA modal */
+  fillHierSelect(sel, "— select a saved batch —", null, { centered: true });   // hierarchy tree, keeps current selection
+  fillHierSelect($("cgpa_batch_sel"), "— select batch —", null, { centered: true });   /* Compute Yearly CGPA modal */
   $("an_empty").style.display = batches.length ? "none" : "block";
   if (window._pendingBatchId) {
     var pb = window._pendingBatchId;
@@ -2202,7 +2269,7 @@ $("an_cgpa_calc_btn").addEventListener("click", function () {
   $("cgpa_go_btn").textContent = "Calculate CGPA";
 
   if (!batches.length) loadBatches();                       /* batches load lazily */
-  fillHierSelect($("cgpa_batch_sel"), "— select batch —");
+  fillHierSelect($("cgpa_batch_sel"), "— select batch —", null, { centered: true });
   $("cgpa_batch_sel").value = currentBatch || "";           /* prefill analytics selection */
   syncHierLabel($("cgpa_batch_sel"));
 
@@ -2249,21 +2316,8 @@ socket.on("yearly-cgpa-result", function(d) {
   lastCgpaResult = d;                 /* kept for Print / Save as PDF */
   const rows = d.results || [];
 
-  /* --- summary --- */
-  let h = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">';
-  [["Students Processed", d.processed], ["Successfully Calculated", d.calculated],
-   ["No Valid SGPA", d.missing]].forEach(c => {
-    h += '<div style="background:linear-gradient(135deg,#1e40af,#1e3a8a);border-radius:10px;padding:10px 12px;color:#fff;">' +
-         '<div style="font-size:11px;opacity:.85;">' + c[0] + '</div>' +
-         '<div style="font-size:22px;font-weight:800;line-height:1.2;">' + (c[1] == null ? 0 : c[1]) + '</div></div>';
-  });
-  h += '</div>';
-  h += '<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px;"><b style="color:var(--ink);">' +
-       esc(d.batch_label || "") + '</b> · ' + esc(d.semester_label || "") +
-       (d.avg_cgpa != null ? ' · average CGPA <b style="color:var(--ink);">' + Number(d.avg_cgpa).toFixed(2) + '</b>' : '') + '</div>';
-
   /* --- results table --- */
-  h += '<div style="max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:10px;">' +
+  let h = '<div style="max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:10px;">' +
        '<table style="width:100%;border-collapse:collapse;font-size:12.5px;">' +
        '<thead><tr>' +
        '<th style="padding:7px 9px;text-align:left;position:sticky;top:0;background:var(--card);z-index:1;">USN</th>' +
@@ -2924,7 +2978,7 @@ function renderStudentRecord(data, container) {
     html += `<div class="sr-sem-card">
       <div class="sr-sem-card-head">
         <span class="sr-sch-label">Semester ${s.semester}</span>
-        <span class="sr-sch-year">${s.scheme || s.year || ""}</span>
+        <span class="sr-sch-year">${s.scheme ? (s.year && s.year !== s.scheme ? s.scheme + " – " + s.year : s.scheme) : (s.year || "")}</span>
         <span class="sr-sch-sgpa">SGPA ${sgpa}</span>
       </div>
       <div style="overflow-x:auto;">

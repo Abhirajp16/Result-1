@@ -22,6 +22,7 @@ students.csv
 
 # Secrets
 .env
+.app_secret_key
 
 # Large model files
 *.h5

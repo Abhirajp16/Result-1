@@ -1,4 +1,4 @@
-# VTU Bulk Result Fetcher + CAPTCHA Solver — Complete Documentation
+ # VTU Bulk Result Fetcher + CAPTCHA Solver — Complete Documentation
 
 > A bit-by-bit, in-depth explanation of how this project works, file by file, end to end.
 > **v2 (2026 build):** stale-Excel bug fixed, SGPA removed, USN range generator added,
